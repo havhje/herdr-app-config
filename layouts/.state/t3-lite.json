@@ -9,6 +9,128 @@
     "type": "row",
     "children": [
       {
+        "id": "work",
+        "type": "column",
+        "children": [
+          {
+            "id": "tabs-row",
+            "type": "row",
+            "children": [
+              {
+                "id": "tabs",
+                "type": "block",
+                "content": {
+                  "mod": "lite-tabs"
+                },
+                "size": {
+                  "weight": 1.0
+                },
+                "window_drag": true
+              }
+            ],
+            "size": {
+              "px": 40.0
+            },
+            "background": "chrome",
+            "resizable": false
+          },
+          {
+            "id": "work-body",
+            "type": "row",
+            "children": [
+              {
+                "id": "panel",
+                "type": "column",
+                "children": [
+                  {
+                    "id": "panel-body",
+                    "type": "stack",
+                    "children": [
+                      {
+                        "id": "files",
+                        "type": "block",
+                        "content": {
+                          "mod": "files"
+                        }
+                      },
+                      {
+                        "id": "changes",
+                        "type": "block",
+                        "content": {
+                          "mod": "changes"
+                        }
+                      }
+                    ],
+                    "active": "files"
+                  }
+                ],
+                "size": {
+                  "px": 368.0
+                },
+                "min": 280.0,
+                "max": 900.0,
+                "hidden": true
+              },
+              {
+                "id": "main",
+                "type": "block",
+                "content": {
+                  "tab": "active",
+                  "pane": {
+                    "header": {
+                      "content": {
+                        "mod": "t3-pane"
+                      },
+                      "reveal": "always",
+                      "height": 28.0,
+                      "position": "top"
+                    },
+                    "background": "background",
+                    "border": {
+                      "width": 2.0,
+                      "color": "background"
+                    },
+                    "focus": {
+                      "width": 2.0,
+                      "color": "background"
+                    },
+                    "radius": 8.0,
+                    "gap": 8.0,
+                    "lone": true
+                  }
+                }
+              }
+            ],
+            "padding": [
+              0.0,
+              8.0
+            ],
+            "gap": 8.0
+          },
+          {
+            "id": "work-bottom-inset",
+            "type": "row",
+            "children": [],
+            "size": {
+              "px": 8.0
+            }
+          },
+          {
+            "id": "status",
+            "type": "block",
+            "content": {
+              "mod": "workspace-status"
+            },
+            "size": {
+              "px": 28.0
+            },
+            "hidden": true
+          }
+        ],
+        "background": "chrome",
+        "resizable": false
+      },
+      {
         "id": "sidebar",
         "type": "column",
         "children": [
@@ -73,128 +195,6 @@
         },
         "min": 208.0,
         "max": 480.0,
-        "background": "chrome",
-        "resizable": false
-      },
-      {
-        "id": "work",
-        "type": "column",
-        "children": [
-          {
-            "id": "tabs-row",
-            "type": "row",
-            "children": [
-              {
-                "id": "tabs",
-                "type": "block",
-                "content": {
-                  "mod": "lite-tabs"
-                },
-                "size": {
-                  "weight": 1.0
-                },
-                "window_drag": true
-              }
-            ],
-            "size": {
-              "px": 40.0
-            },
-            "background": "chrome",
-            "resizable": false
-          },
-          {
-            "id": "work-body",
-            "type": "row",
-            "children": [
-              {
-                "id": "main",
-                "type": "block",
-                "content": {
-                  "tab": "active",
-                  "pane": {
-                    "header": {
-                      "content": {
-                        "mod": "t3-pane"
-                      },
-                      "reveal": "always",
-                      "height": 28.0,
-                      "position": "top"
-                    },
-                    "background": "background",
-                    "border": {
-                      "width": 2.0,
-                      "color": "background"
-                    },
-                    "focus": {
-                      "width": 2.0,
-                      "color": "background"
-                    },
-                    "radius": 8.0,
-                    "gap": 8.0,
-                    "lone": true
-                  }
-                }
-              },
-              {
-                "id": "panel",
-                "type": "column",
-                "children": [
-                  {
-                    "id": "panel-body",
-                    "type": "stack",
-                    "children": [
-                      {
-                        "id": "files",
-                        "type": "block",
-                        "content": {
-                          "mod": "files"
-                        }
-                      },
-                      {
-                        "id": "changes",
-                        "type": "block",
-                        "content": {
-                          "mod": "changes"
-                        }
-                      }
-                    ],
-                    "active": "files"
-                  }
-                ],
-                "size": {
-                  "px": 368.0
-                },
-                "min": 280.0,
-                "max": 900.0,
-                "hidden": true
-              }
-            ],
-            "padding": [
-              0.0,
-              8.0
-            ],
-            "gap": 8.0
-          },
-          {
-            "id": "work-bottom-inset",
-            "type": "row",
-            "children": [],
-            "size": {
-              "px": 8.0
-            }
-          },
-          {
-            "id": "status",
-            "type": "block",
-            "content": {
-              "mod": "workspace-status"
-            },
-            "size": {
-              "px": 28.0
-            },
-            "hidden": true
-          }
-        ],
         "background": "chrome",
         "resizable": false
       }
