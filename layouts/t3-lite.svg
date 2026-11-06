@@ -1,43 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" font-family="system-ui,sans-serif">
   <rect width="640" height="400" rx="12" fill="#141418"/>
-  <!-- Window buttons; at the brand bar's right end the sidebar mode (layers: show Lists) and the sidebar toggle -->
-  <g fill="#3b3b40"><circle cx="22" cy="20" r="6"/><circle cx="42" cy="20" r="6"/><circle cx="62" cy="20" r="6"/></g>
-  <g fill="none" stroke="#83838f" stroke-width="1.5" stroke-linejoin="round"><path d="M120 13.5l-6.5 3 6.5 3 6.5-3zM113.5 20l6.5 3 6.5-3M113.5 23.5l6.5 3 6.5-3"/><rect x="138" y="14" width="14" height="12" rx="3"/><path d="M143 14v12"/></g>
-  <path d="M168 0v400" stroke="#353539"/>
-  <!-- The Inbox: search, the cards that need you, then the folded Working shelf and the Settled one -->
-  <g fill="none" stroke="#83838f" stroke-width="1.5"><circle cx="21" cy="56" r="4.5"/><path d="M24.5 59.5l3 3"/></g>
-  <text x="34" y="61" font-size="12" fill="#83838f">Search</text>
-  <rect x="8" y="72" width="152" height="50" rx="8" fill="#2c2c2f"/><rect x="16" y="81" width="12" height="12" rx="3" fill="#e3814f" fill-opacity="0.18"/><text x="22" y="90" font-size="8" font-weight="700" font-family="monospace" fill="#e3814f" text-anchor="middle">A</text>
-  <text x="34" y="91" font-size="11" fill="#83838f">app</text><text x="152" y="91" font-size="11" fill="#4fd17a" text-anchor="end">Done</text>
-  <text x="16" y="112" font-size="13" font-weight="500" fill="#e6e6ea">Fix login</text>
-  <rect x="16" y="135" width="12" height="12" rx="3" fill="#5b8def" fill-opacity="0.18"/><text x="22" y="144" font-size="8" font-weight="700" font-family="monospace" fill="#5b8def" text-anchor="middle">I</text>
-  <text x="34" y="145" font-size="11" fill="#83838f">infra</text><text x="152" y="145" font-size="11" fill="#f0a33a" text-anchor="end">Needs you</text>
-  <text x="16" y="166" font-size="13" font-weight="500" fill="#e6e6ea">Bump deps</text>
-  <rect x="16" y="189" width="12" height="12" rx="3" fill="#e3814f" fill-opacity="0.18"/><text x="22" y="198" font-size="8" font-weight="700" font-family="monospace" fill="#e3814f" text-anchor="middle">A</text>
-  <text x="34" y="199" font-size="11" fill="#83838f">app</text><text x="152" y="199" font-size="11" fill="#4fd17a" text-anchor="end">Done</text>
-  <text x="16" y="220" font-size="13" font-weight="500" fill="#e6e6ea">Release notes</text>
-  <g font-size="12" fill="#a9a9b4"><text x="16" y="274">Working</text><text x="16" y="300">Settled</text></g>
-  <g font-size="11" fill="#83838f" text-anchor="end"><text x="140" y="274">6</text><text x="140" y="300">2</text></g>
-  <path d="M148 266l4 4-4 4M146 293l4 4 4-4" fill="none" stroke="#83838f" stroke-width="1.5"/>
-  <rect x="16" y="314" width="12" height="12" rx="3" fill="#5b8def" fill-opacity="0.18"/><text x="22" y="323" font-size="8" font-weight="700" font-family="monospace" fill="#5b8def" text-anchor="middle">I</text><rect x="16" y="338" width="12" height="12" rx="3" fill="#e3814f" fill-opacity="0.18"/><text x="22" y="347" font-size="8" font-weight="700" font-family="monospace" fill="#e3814f" text-anchor="middle">A</text>
-  <g font-size="12" fill="#a9a9b4"><text x="34" y="324">Pin the CI image</text><text x="34" y="348">Lint fixes</text></g>
-  <g font-size="11" fill="#83838f" text-anchor="end"><text x="152" y="324">4m</text><text x="152" y="348">2h</text></g>
-  <!-- Footer: a row of icon buttons, Settings and Add machine -->
-  <g fill="none" stroke="#83838f" stroke-width="1.5"><circle cx="24" cy="380" r="6"/><circle cx="24" cy="380" r="2"/><rect x="41" y="373" width="14" height="6" rx="2"/><rect x="41" y="381" width="14" height="6" rx="2"/></g>
-  <!-- Tabs and the pane card -->
-  <rect x="176" y="8" width="88" height="24" rx="6" fill="#2c2c2f"/>
-  <g font-size="12"><text x="198" y="24" fill="#e6e6ea">Fix login</text><text x="288" y="24" fill="#a9a9b4">infra</text></g>
-  <g fill="#a9a9b4"><rect x="184" y="15" width="10" height="10" rx="2"/><rect x="274" y="15" width="10" height="10" rx="2"/></g>
-  <!-- The Actions control -->
-  <rect x="529.5" y="8.5" width="75" height="23" rx="8" fill="none" stroke="#353539"/>
-  <path d="M538 15.5v9l7-4.500z" fill="none" stroke="#83838f" stroke-width="1.5" stroke-linejoin="round"/>
-  <text x="551" y="24" font-size="12" fill="#a9a9b4">Dev</text>
-  <path d="M579.500 14v12" stroke="#353539"/>
-  <path d="M587 18l4 4 4-4" fill="none" stroke="#83838f" stroke-width="1.5"/>
-  <path d="M613 20h12M619 14v12" stroke="#83838f" stroke-width="1.5"/>
-  <rect x="176" y="42" width="456" height="350" rx="8" fill="#232328"/>
-  <rect x="184" y="51" width="10" height="10" rx="2" fill="#a9a9b4"/>
-  <text x="202" y="60" font-size="14" font-weight="500" fill="#e6e6ea">Pi <tspan font-weight="400" fill="#83838f">~/app</tspan></text>
-  <circle cx="620" cy="56" r="3.5" fill="#e6e6ea"/>
-  <g font-family="monospace" font-size="11" fill="#a9a9b4"><text x="184" y="88">$ pi</text><text x="184" y="106">Reading src/login.ts</text><text x="184" y="124">Edited 2 files</text><text x="184" y="148" fill="#e6e6ea">Fixed: the session cookie expired a day early.</text></g>
+  <!-- Tab bar: slim tabs (active on a ground, with its ×), then + and the Files / Changes ghost buttons -->
+  <rect x="8" y="8" width="104" height="24" rx="8" fill="#2c2c2f"/>
+  <g fill="#a9a9b4"><rect x="14" y="15" width="10" height="10" rx="2"/><rect x="124" y="15" width="10" height="10" rx="2"/><rect x="212" y="15" width="10" height="10" rx="2"/></g>
+  <g font-size="12"><text x="29" y="24" fill="#e6e6ea">Fix login</text><text x="139" y="24" fill="#83838f">infra</text><text x="227" y="24" fill="#83838f">docs</text></g>
+  <path d="M98 16l6 6M104 16l-6 6" stroke="#e6e6ea" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="190" cy="20" r="3" fill="#4fd17a"/>
+  <path d="M336 20h10M341 15v10" stroke="#83838f" stroke-width="1.5" stroke-linecap="round"/>
+  <g fill="none" stroke="#e6e6ea" stroke-width="1.3"><path d="M362 14h6l3 3v9h-9z"/></g>
+  <text x="376" y="24" font-size="12" fill="#e6e6ea">Files</text>
+  <g fill="none" stroke="#83838f" stroke-width="1.3"><circle cx="412" cy="16" r="2"/><circle cx="420" cy="24" r="2"/><path d="M412 18v3a3 3 0 0 0 3 3h3"/></g>
+  <text x="428" y="24" font-size="12" fill="#83838f">Changes</text>
+  <!-- Files panel on the left -->
+  <rect x="8" y="42" width="128" height="350" rx="8" fill="#232328"/>
+  <text x="18" y="62" font-size="12" font-weight="500" fill="#e6e6ea">Files</text>
+  <g font-size="11" fill="#a9a9b4"><text x="28" y="88">src</text><text x="28" y="108">tests</text><text x="28" y="128">docs</text><text x="28" y="148">README.md</text><text x="28" y="168">package.json</text></g>
+  <g fill="none" stroke="#83838f" stroke-width="1.2"><path d="M17 82l3 3-3 3M17 102l3 3-3 3M17 122l3 3-3 3"/></g>
+  <!-- The pane card -->
+  <rect x="144" y="42" width="336" height="350" rx="8" fill="#232328"/>
+  <rect x="152" y="51" width="10" height="10" rx="2" fill="#a9a9b4"/>
+  <text x="170" y="60" font-size="14" font-weight="500" fill="#e6e6ea">Fix login <tspan font-weight="400" fill="#83838f">~/app</tspan></text>
+  <circle cx="468" cy="56" r="3.5" fill="#e6e6ea"/>
+  <g font-family="monospace" font-size="11" fill="#a9a9b4"><text x="152" y="88">$ pi</text><text x="152" y="106">Reading src/login.ts</text><text x="152" y="124">Edited 2 files</text><text x="152" y="148" fill="#e6e6ea">Fixed: the cookie expired early.</text></g>
+  <!-- Sidebar on the right: toggle at its inner edge, Spaces, Agents, footer -->
+  <path d="M488 0v400" stroke="#353539"/>
+  <g fill="none" stroke="#83838f" stroke-width="1.5" stroke-linejoin="round"><rect x="498" y="14" width="14" height="12" rx="3"/><path d="M507 14v12"/></g>
+  <text x="498" y="62" font-size="11" fill="#83838f">Spaces</text>
+  <rect x="494" y="72" width="138" height="24" rx="8" fill="#2c2c2f"/>
+  <rect x="500" y="78" width="12" height="12" rx="3" fill="#e3814f" fill-opacity="0.18"/><text x="506" y="87" font-size="8" font-weight="700" font-family="monospace" fill="#e3814f" text-anchor="middle">A</text>
+  <text x="518" y="88" font-size="12" fill="#e6e6ea">app</text>
+  <rect x="500" y="104" width="12" height="12" rx="3" fill="#5b8def" fill-opacity="0.18"/><text x="506" y="113" font-size="8" font-weight="700" font-family="monospace" fill="#5b8def" text-anchor="middle">I</text>
+  <text x="518" y="114" font-size="12" fill="#a9a9b4">infra</text>
+  <path d="M488 210h152" stroke="#353539"/>
+  <text x="498" y="232" font-size="11" fill="#83838f">Agents</text>
+  <g font-size="12" fill="#a9a9b4"><text x="518" y="258" fill="#e6e6ea">Fix login</text><text x="518" y="282">Bump deps</text></g>
+  <g fill="#a9a9b4"><rect x="500" y="249" width="10" height="10" rx="2"/><rect x="500" y="273" width="10" height="10" rx="2"/></g>
+  <circle cx="620" cy="254" r="3" fill="#4fd17a"/>
+  <rect x="613" y="271" width="14" height="14" rx="4" fill="#f0a33a" fill-opacity="0.15"/><text x="620" y="282" font-size="10" font-weight="700" fill="#f0a33a" text-anchor="middle">!</text>
+  <g fill="none" stroke="#83838f" stroke-width="1.5"><circle cx="506" cy="380" r="6"/><circle cx="506" cy="380" r="2"/><rect x="523" y="373" width="14" height="6" rx="2"/><rect x="523" y="381" width="14" height="6" rx="2"/></g>
 </svg>
