@@ -2,6 +2,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
 import { namer, programOf } from "./name.js";
+import { tip, glow } from "./tip.js";
 
 // T3's status marks: spinner while working, a "!" badge when it needs you, a dot when done.
 const mark = (t, s) => s === "working" ? svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)
@@ -58,8 +59,11 @@ export default class Tabs extends View {
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
     const stop = (_e, cx) => cx.stop_propagation();
-    const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
-      .on_mouse_down("left", stop).on_click(action).child(label);
+    // T3's ghost buttons: no ground until hovered, radius 8; icon and text light up together (a hover style doesn't reach an svg).
+    const lit = (id, on) => on || this.hot === id ? t.foreground : t.muted;
+    const button = (id, glyph, label, action, { key, size = 24 } = {}) => tip(this, t, id, label,
+      div().id(id).size(size).flex_none().flex().items_center().justify_center().rounded(8).text_color(lit(id)).hover(s => s.bg(t.hover)).on_hover(glow(this, id))
+        .on_mouse_down("left", stop).on_click(action).child(glyph), { action: key, below: true });
     const ps = panes(), nameFor = namer();
     const item = (c, i) => {
       const lead = leadOf(ps.filter(p => p.tab === c.id));
@@ -85,10 +89,11 @@ export default class Tabs extends View {
         .child(div().flex_1().min_w(0).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(status != null, el => el.child(div().size(16).flex_none().flex().items_center().justify_center().child(mark(t, status))))
         // The × slot is always there so a hover doesn't shift the bar; the × shows on the active or hovered tab.
-        .child(div().id(`close-${c.id}`).size(16).flex_none().flex().items_center().justify_center().rounded(4)
+        // Its label waits 500ms, so a straight click never meets it; the key closes the active tab only.
+        .child(tip(this, t, `close-${c.id}`, "Close tab", div().id(`close-${c.id}`).size(16).flex_none().flex().items_center().justify_center().rounded(4)
           .when(c.active || over, el => el.text_color(t.foreground).hover(s => s.bg(t.raised))
             .on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); })
-            .child(svg("mods/lite-tabs/icons/x.svg").size(12))));
+            .child(svg("mods/lite-tabs/icons/x.svg").size(12))), { action: c.active ? "tab.close" : undefined, below: true, delay: 500, off: !(c.active || over) }));
     };
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
@@ -99,24 +104,24 @@ export default class Tabs extends View {
     const enabled = shared("workspace.panels") ?? ["files", "changes"];
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon) => {
-      const on = panel && !panel.hidden && body?.active === id;
-      return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
-        .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
+      const on = panel && !panel.hidden && body?.active === id, bid = `panel-${id}`;
+      return tip(this, t, bid, on ? `Hide ${label}` : `Show ${label}`, h_flex().id(bid).h(24).px(8).gap(6).flex_none().items_center().rounded(8)
+        .text_size(12).text_color(lit(bid, on)).when(on, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
+        .on_hover(glow(this, bid)).on_mouse_down("left", stop)
         .on_click(() => {
           if (on) run("layout.hide", { id: "panel" });
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
-        }).child(svg(icon).size(14)).child(label);
+        }).child(svg(icon).size(14).flex_none()).child(label), { below: true });
     };
-    return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
+    return h_flex().size_full().min_w(0).pl(lightsPadding).pr(12).gap(4).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children(shown.map(item)))
-      .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
-      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
-      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
-      .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/lite-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
-        .child(button("maximize", w.platform === "windows" ? svg(`mods/lite-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
-        .child(button("close-window", w.platform === "windows" ? svg("mods/lite-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
+      .child(button("tab-new", svg("mods/lite-tabs/icons/plus.svg").size(14), "New tab", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
+      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/lite-tabs/icons/file.svg")))
+      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/lite-tabs/icons/git-compare.svg")))
+      .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/lite-tabs/win-min.svg").size(16) : "−", "Minimize", () => run("window.minimize"), { size: 28 }))
+        .child(button("maximize", w.platform === "windows" ? svg(`mods/lite-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", w.maximized ? "Restore" : "Maximize", () => run("window.maximize"), { size: 28 }))
+        .child(button("close-window", w.platform === "windows" ? svg("mods/lite-tabs/win-close.svg").size(16) : svg("mods/lite-tabs/icons/x.svg").size(16), "Close window", () => run("window.close"), { size: 28 })));
   }
 }
