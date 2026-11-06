@@ -1,7 +1,7 @@
 {
   "id": "root",
   "type": "row",
-  "preview": "layouts/herdr-t3.svg",
+  "preview": "layouts/t3-lite.svg",
   "divider": {
     "width": 1,
     "color": "border"
