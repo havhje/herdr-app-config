@@ -4,5 +4,8 @@
     "enabled": true
   },
   "font_ligatures": false,
-  "minimum_contrast": 1.0
+  "minimum_contrast": 1.0,
+  "theme": "omarchy",
+  "font": "iA Writer Mono S",
+  "font_size": 14
 }
