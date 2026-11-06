@@ -1,6 +1,14 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { namer, programOf } from "./name.js";
+
+// T3's status marks: spinner while working, a "!" badge when it needs you, a dot when done.
+const mark = (t, s) => s === "working" ? svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)
+  : s === "blocked" ? div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!")
+  : div().size(6).flex_none().rounded_full().bg(t.done);
+// The pane a tab is named after: its agent, else its focused pane, else its first.
+const leadOf = (mine) => mine.find(p => p.status != null) ?? mine.find(p => p.focused) ?? mine[0];
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -52,12 +60,20 @@ export default class Tabs extends View {
     const stop = (_e, cx) => cx.stop_propagation();
     const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(action).child(label);
+    const ps = panes(), nameFor = namer();
     const item = (c, i) => {
-      const program = panes().find(p => p.tab === c.id && p.program?.agent)?.program ?? panes().find(p => p.tab === c.id)?.program;
-      const name = /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
-      return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
-        .border(1).border_color(c.active ? t.border : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
-        .hover(s => s.bg(t.hover))
+      const lead = leadOf(ps.filter(p => p.tab === c.id));
+      const program = lead && programOf(lead);
+      const name = c.named ? c.name : lead ? nameFor(lead) : "Terminal";
+      const status = c.status === "working" || c.status === "blocked" || c.status === "done" ? c.status : null;
+      const over = this.overTab === c.id;
+      const glyph = !program?.icon ? svg("mods/lite-tabs/icons/terminal.svg").size(12).text_color(t.muted)
+        : program.tint ? svg(program.icon).size(12).text_color(t.muted) : image(program.icon).size(12);
+      // T3's slim tab: 24px, radius 8, 12px text; active on `selected`, the rest muted with no ground.
+      return h_flex().id(`tab-${c.id}`).h(24).min_w(96).max_w(240).pl(6).pr(4).gap(2).rounded(8).items_center().flex_none().text_size(12)
+        .bg(c.active ? t.selected : t.chrome).text_color(c.active || over ? t.foreground : t.muted)
+        .when(!c.active, el => el.hover(s => s.bg(t.hover)))
+        .on_hover((on, cx) => { if (on) this.overTab = c.id; else if (this.overTab === c.id) this.overTab = null; cx.notify(); })
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
@@ -65,11 +81,14 @@ export default class Tabs extends View {
           else run("tab.select", { id: c.id });
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
-        .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
-        .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
-        .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status])))
-        .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));
+        .child(div().size(16).flex_none().flex().items_center().justify_center().child(glyph))
+        .child(div().flex_1().min_w(0).truncate().child(c.zoomed ? `${name} Z` : name))
+        .when(status != null, el => el.child(div().size(16).flex_none().flex().items_center().justify_center().child(mark(t, status))))
+        // The × slot is always there so a hover doesn't shift the bar; the × shows on the active or hovered tab.
+        .child(div().id(`close-${c.id}`).size(16).flex_none().flex().items_center().justify_center().rounded(4)
+          .when(c.active || over, el => el.text_color(t.foreground).hover(s => s.bg(t.raised))
+            .on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); })
+            .child(svg("mods/lite-tabs/icons/x.svg").size(12))));
     };
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
@@ -92,7 +111,7 @@ export default class Tabs extends View {
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
