@@ -27,7 +27,7 @@
         {
           "id": "sidebar-lists",
           "type": "stack",
-          "active": "inbox",
+          "active": "lists",
           "children": [
             {
               "id": "lists",
