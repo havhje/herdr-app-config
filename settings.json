@@ -1,5 +1,5 @@
 {
-  "zoom": 1.0,
+  "zoom": 1.077,
   "sounds": {
     "enabled": true
   },
@@ -7,5 +7,5 @@
   "minimum_contrast": 1.0,
   "theme": "omarchy",
   "font": "iA Writer Mono S",
-  "font_size": 14
+  "font_size": 12.54
 }
