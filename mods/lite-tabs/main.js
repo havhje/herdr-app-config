@@ -106,7 +106,7 @@ export default class Tabs extends View {
     const panelButton = (id, label, icon) => {
       const on = panel && !panel.hidden && body?.active === id, bid = `panel-${id}`;
       return tip(this, t, bid, on ? `Hide ${label}` : `Show ${label}`, h_flex().id(bid).h(24).px(8).gap(6).flex_none().items_center().rounded(8)
-        .text_size(12).text_color(lit(bid, on)).when(on, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
+        .text_size(12).text_color(lit(bid, on)).hover(s => s.bg(t.hover))
         .on_hover(glow(this, bid)).on_mouse_down("left", stop)
         .on_click(() => {
           if (on) run("layout.hide", { id: "panel" });
