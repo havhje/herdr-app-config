@@ -42,16 +42,8 @@ export default class WorkspaceChrome extends View {
             .on_click(() => run("t3-tabs.undo")))
           .child("Undo")
           .when(n.live && Date.now() - n.at < 5000, (el) => stop(this, t, "undo-notice-undo", el, 4)));
-      const button = (id, glyph, label, action, key) => tip(this, t, id, label, stop(this, t, id, div().id(id).size(32).flex_none().flex().items_center().justify_center().rounded(8)
-        .text_color(lit(id)).hover(s => s.bg(t.hover)).on_hover(glow(this, id))
-        .role("button").accessibility_label(label)
-        // Each opens over its button, before the pointer can report leaving it.
-        .on_click((_e, cx) => { this.hot = null; action(); cx.notify(); })
-        .child(glyph), 8), { action: key });
       // T3's footer: 8 in and 4 above its row, whatever height the layout gives the block.
       return focusRoot(this, div().size_full().bg(t.chrome).px(8).pt(4).child(h_flex().h(32).gap(4).items_center()
-        .child(button("settings", svg("mods/lite-chrome/icons/settings.svg").size(16), "Settings", () => run("app.settings"), "app.settings"))
-        .child(button("add-machine", svg("mods/lite-chrome/icons/server.svg").size(16), "Add machine", () => run("mod.open", { name: "machine-add" })))
         .child(notice || div().flex_1())
         .when(Boolean(ready), el => el.child(tip(this, t, "app-update", `Update ${ready} downloaded. Click to restart`, stop(this, t, "app-update", div().id("app-update").h(32).px(12).flex_none().flex().items_center()
           .rounded_full().bg(t.accent + "26").text_size(12).text_color(t.accent).hover(s => s.bg(t.accent + "40")).on_hover(glow(this, "app-update"))

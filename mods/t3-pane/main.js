@@ -1,16 +1,16 @@
 // A pane's header, for layouts that frame their panes:
 //   { "tab": "active", "pane": { "header": { "content": { "mod": "t3-pane" } } } }
 // Shows the program's icon (the app's program table), the agent's name or
-// the terminal's title, the folder, and the agent's status; buttons split, zoom and close
-// this pane. Props from the app: { pane, terminal }. Click: focus the pane.
+// the terminal's title, the folder, and the agent's status. No buttons (nvim style: <leader>w splits,
+// zooms and closes). Props from the app: { pane, terminal }. Click: focus the pane.
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, terminals, agents, props, run, theme, home } from "herdr";
 import { modStatus, namer, programOf } from "./name.js";
 import { notNews, ownStatus, subAgents, treeStatus } from "./tree.js";
-import { tip, tipMark, glow, POINTER_WATCH, pointerAt, pointerGone, pointerMoved } from "./tip.js";
-import { stopsInit, stopsEnd, stop, focusRoot, within } from "./focus.js";
+import { tipMark, POINTER_WATCH, pointerAt, pointerGone, pointerMoved } from "./tip.js";
+import { stopsInit, stopsEnd, stop, focusRoot } from "./focus.js";
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -55,25 +55,6 @@ export default class Pane extends View {
     return panes().find((p) => p.pane === props()?.pane);
   }
 
-  button(t, id, icon, label, action, key) {
-    return tip(this, t, id, label, stop(this, t, id, div()
-      .id(id)
-      .size(24).flex_none().flex().items_center().justify_center()
-      .rounded(8)
-      // Its icon brightens by state: a hover style reaches text but not an svg, as in the inbox.
-      .text_color(this.hot === id ? t.foreground : t.dim)
-      .role("button").accessibility_label(label)
-      .hover((s) => s.bg(t.hover))
-      .on_hover(glow(this, id))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        action();
-        cx.notify();
-      })
-      .child(svg(icon).size(14)), 8), { action: key });
-  }
-
   render(cx) {
     const t = theme();
     const p = this.me();
@@ -88,8 +69,7 @@ export default class Pane extends View {
     const pane = p.pane;
     // A mark takes the last button's 24px, so it, the × and the tab bar's + share one column: this header's pr(2), the frame's 2 and the block's 8 are the bar's 12.
     const slot = (mark) => div().w(24).flex_none().flex().items_center().justify_center().child(mark);
-    // The buttons show with the keyboard on the header or one of them, as they do hovered: the header's the stop that gets there.
-    const head = `pane-head-${pane}`, tools = ["r", "d", "z", "x"].map((k) => `ph-${k}-${pane}`);
+    const head = `pane-head-${pane}`;
     // The rounded frame paints the background; rectangular child fills would cover its corners.
     return focusRoot(this, stop(this, t, head, h_flex()
       .id(head)
@@ -108,12 +88,7 @@ export default class Pane extends View {
       .child(div().min_w(0).truncate().font_medium().text_color(p.focused ? t.foreground : t.muted).child(name))
       .child(div().relative().flex_1().min_w(0).h_full().flex().items_center()
         .child(div().flex_1().min_w(0).truncate().pr(12).text_color(t.dim).child(folder(p.cwd)))
-        // Over the folder's end, so hovering moves nothing else, as in the agents list and the inbox.
-        .when(this.hovered || within(this, [head, ...tools]), el => el.child(h_flex().absolute().top(0).bottom(0).right(0).pl(12).flex_none().gap(4).items_center().bg(t.background)
-          .child(this.button(t, `ph-r-${pane}`, "mods/t3-pane/icons/square-split-horizontal.svg", "Split right", () => run("pane.split", { direction: "right", pane }), "pane.split:right"))
-          .child(this.button(t, `ph-d-${pane}`, "mods/t3-pane/icons/square-split-vertical.svg", "Split down", () => run("pane.split", { direction: "down", pane }), "pane.split:down"))
-          .child(this.button(t, `ph-z-${pane}`, `mods/t3-pane/icons/${p.zoomed ? "minimize-2" : "maximize-2"}.svg`, p.zoomed ? "Unzoom pane" : "Zoom pane", () => run("pane.zoom", { pane }), "pane.zoom"))
-          .child(this.button(t, `ph-x-${pane}`, "mods/t3-pane/icons/x.svg", "Close pane", () => { this.hot = null; run("pane.close", { pane }); }, "pane.close")))))
+      )
       .when(st === "working", el => el.child(slot(tipMark(this, t, `ph-mark-${pane}`, "Working", svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))))
       // The same marks as the agents list and tabs.
       .when(st === "blocked", el => el.child(slot(tipMark(this, t, `ph-mark-${pane}`, "Needs you", div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().accessibility_label("Needs you").child("!")))))
