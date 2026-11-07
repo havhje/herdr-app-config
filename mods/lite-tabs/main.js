@@ -30,23 +30,30 @@ export default class Tabs extends View {
     // Worktree buffers show their branch: space id -> branch, for linked checkouts only. Polled gently.
     this.worktrees = {};
     this.checkWorktrees(cx);
-    cx.timer.every(10000, (cx) => this.checkWorktrees(cx));
+    cx.timer.every(5000, (cx) => this.checkWorktrees(cx));
   }
 
   // A space is a worktree when its git dir isn't its top's own .git (as t3-menu's checkout()).
   checkWorktrees(cx) {
     cx.spawn(async (cx) => {
-      const next = {}, ps = panes();
+      const next = {}, ps = panes(); let git = null;
       for (const s of spaces()) {
         const tabs = new Set((s.tabs ?? []).map((c) => c.id));
-        const cwd = ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
+        // The shown buffer follows the focused terminal, so git info matches where you are.
+        const cwd = (s.active && ps.find((p) => p.focused && p.cwd)?.cwd) || ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
         if (!cwd) continue;
         const r = await exec("sh", ["-c", 'git rev-parse --show-toplevel --path-format=absolute --git-common-dir && git branch --show-current'], { cwd, on: s.machine ?? undefined }).catch(() => null);
         if (r?.code !== 0) continue;
         const [top, common, branch] = r.stdout.split("\n");
         if (common !== `${top}/.git`) next[s.id] = branch || "detached";
+        if (s.active) {
+          const st = await exec("sh", ["-c", "git status --porcelain"], { cwd, on: s.machine ?? undefined }).catch(() => null);
+          const lines = st?.code === 0 ? st.stdout.split("\n").filter(Boolean) : [];
+          git = { branch: branch || "detached", added: lines.filter((l) => l.startsWith("??") || l[0] === "A").length,
+            changed: lines.filter((l) => !(l.startsWith("??") || l[0] === "A")).length };
+        }
       }
-      if (JSON.stringify(next) !== JSON.stringify(this.worktrees)) { this.worktrees = next; cx.notify(); }
+      if (JSON.stringify([next, git]) !== JSON.stringify([this.worktrees, this.git])) { this.worktrees = next; this.git = git; cx.notify(); }
     });
   }
 
@@ -97,18 +104,35 @@ export default class Tabs extends View {
       .child(div().max_w(200).truncate().text_color(p.active ? t.foreground : t.muted).when(p.active, el => el.font_bold()).child(p.name))
       .when(Boolean(this.worktrees[p.id]), el => el.child(div().max_w(160).truncate().text_color(t.ansi5).child(`:${this.worktrees[p.id]}`)))
       .when(mark(p.status) != null, el => el.child(mark(p.status)));
-    // The shown buffer's tabs fill the right side as pills, so they don't read as buffers:
-    // the shown one filled with the accent, the others outlined. Rename: <leader>tr.
+    // The shown buffer's tabs follow it as pills, so you see whose they are. Rename: <leader>tr.
     const tab = (c) => h_flex().h(24).flex_none().items_center().gap(5).px(10).rounded(12).text_size(12)
       .bg(c.active ? t.accent : t.chrome).border(1).border_color(c.active ? t.accent : t.border)
       .child(div().text_color(c.active ? t.accent_foreground : t.dim).child(`${c.index}`))
       .child(div().max_w(200).truncate().text_color(c.active ? t.accent_foreground : t.muted).when(c.active, el => el.font_bold()).child(c.named ? c.name : "tab"))
       .when(mark(c.status) != null, el => el.child(c.active ? div().text_color(t.accent_foreground).child(c.status === "blocked" ? "!" : "●") : mark(c.status)));
-    const shown = all.find((p) => p.active), tabs = (shown?.tabs ?? []).filter((c) => !c.settled || c.active);
+    const tabStrip = (p) => h_flex().h_full().flex_none().items_center().gap(6).pl(4).pr(12)
+      .bg(t.background).border_r(1).border_color(t.border)
+      .children((p.tabs ?? []).filter((c) => !c.settled || c.active).map(tab));
+    // Right: where the shown buffer is, its git state, and agents across all buffers (statusline style).
+    const shown = all.find((p) => p.active), g = this.git, ps = panes();
+    const count = (st) => ps.filter((x) => x.status === st).length;
+    const home = (f) => (f ?? "").replace(/^\/home\/[^/]+/, "~");
+    const folder = home(ps.find((x) => x.focused)?.cwd ?? shown?.folder);
+    const seg = (color, text) => div().flex_none().text_color(color).child(text);
+    const info = h_flex().flex_none().items_center().gap(14).px(14).text_size(12)
+      .when(Boolean(folder), el => el.child(div().max_w(320).truncate().text_color(t.muted).child(folder)))
+      .when(Boolean(g), el => el.child(h_flex().gap(6)
+        .child(seg(t.ansi5, g.branch))
+        .when(g.added > 0, e => e.child(seg(t.ansi2, `+${g.added}`)))
+        .when(g.changed > 0, e => e.child(seg(t.ansi3, `~${g.changed}`)))))
+      .when(count("working") + count("blocked") + count("done") > 0, el => el.child(h_flex().gap(8)
+        .when(count("working") > 0, e => e.child(seg(t.working, `● ${count("working")}`)))
+        .when(count("blocked") > 0, e => e.child(seg(t.blocked, `! ${count("blocked")}`)))
+        .when(count("done") > 0, e => e.child(seg(t.done, `✓ ${count("done")}`)))));
     return h_flex().size_full().min_w(0).items_center().bg(t.chrome).border_b(1).border_color(t.border)
-      .font_family(font).text_size(13).overflow_x_hidden()
-      .child(h_flex().h_full().flex_1().min_w(0).overflow_x_hidden().children(all.map(cell)))
-      .child(div().flex_none().pr(8).pl(14).text_size(12).font_bold().text_color(t.ansi5).child("Tabs:"))
-      .child(h_flex().h_full().flex_none().items_center().gap(6).pr(10).children(tabs.map(tab)));
+      .font_family(font).text_size(13)
+      .child(h_flex().h_full().flex_1().min_w(0).overflow_x_hidden()
+        .children(all.flatMap((p) => p.active ? [cell(p), tabStrip(p)] : [cell(p)])))
+      .child(info);
   }
 }

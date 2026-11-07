@@ -9,6 +9,40 @@
   "terminal_menu": "t3-menu",
   "children": [
     {
+      "id": "panel",
+      "type": "column",
+      "hidden": true,
+      "size": {
+        "px": 368
+      },
+      "min": 280,
+      "max": 900,
+      "children": [
+        {
+          "id": "panel-body",
+          "type": "stack",
+          "active": "files",
+          "children": [
+            {
+              "id": "files",
+              "type": "block",
+              "content": {
+                "mod": "nvim-files"
+              }
+            },
+            {
+              "id": "changes",
+              "type": "block",
+              "content": {
+                "mod": "nvim-changes"
+              }
+            }
+          ]
+        }
+      ],
+      "background": "chrome"
+    },
+    {
       "id": "work",
       "type": "column",
       "children": [
@@ -38,39 +72,6 @@
           "id": "work-body",
           "type": "row",
           "children": [
-            {
-              "id": "panel",
-              "type": "column",
-              "hidden": true,
-              "size": {
-                "px": 368
-              },
-              "min": 280,
-              "max": 900,
-              "children": [
-                {
-                  "id": "panel-body",
-                  "type": "stack",
-                  "active": "files",
-                  "children": [
-                    {
-                      "id": "files",
-                      "type": "block",
-                      "content": {
-                        "mod": "nvim-files"
-                      }
-                    },
-                    {
-                      "id": "changes",
-                      "type": "block",
-                      "content": {
-                        "mod": "nvim-changes"
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
             {
               "id": "main",
               "type": "block",
@@ -104,8 +105,7 @@
           "padding": [
             0,
             8
-          ],
-          "gap": 8
+          ]
         },
         {
           "id": "work-bottom-inset",
