@@ -38,3 +38,5 @@
 *.old-*
 jsconfig.json
 gpui-kit.d.ts
+# Window state the app writes as you use it (panel sizes, shown/hidden rows).
+/layouts/.state/
