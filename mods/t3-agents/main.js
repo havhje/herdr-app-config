@@ -3,10 +3,11 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, spaces, focused, theme, layout, shared, setShared, setAgentOrder, settings, openOverlay, closeOverlay, props, nextCommand } from "herdr";
+import { agents, terminals, panes, spaces, focused, theme, layout, shared, setShared, setAgentOrder, settings, openOverlay, closeOverlay, props, nextCommand, run } from "herdr";
 import { notNews, ownStatus, subAgents, treeStatus } from "./tree.js";
 import { glow, tip } from "./tip.js";
-import { stopsInit, stopsEnd, stop, focusRoot, enter } from "./focus.js";
+import { stopsInit, stopsEnd, stop, focusRoot, enter, onStop } from "./focus.js";
+import { focusAgent } from "./zoom.js";
 import { menuJump } from "./list.js";
 import { MOTION, planMotion, flying, leavingRows } from "./motion.js";
 import { agentEntries, agentStatus, STACK, RANK, SECTION } from "./rows.js";
@@ -33,7 +34,12 @@ export default class Agents extends View {
     stopsInit(this, cx);
     // pane.go onto this list (mod.json's "focusable"): the keyboard starts at the heading's button.
     cx.spawn(async (cx) => {
-      for (;;) if (await nextCommand() === "focus") enter(this, cx, "ag-sort");
+      // nvim feel: it lands on the agent you're viewing (else the first), and j/k walk the agents (navKey).
+      for (;;) if (await nextCommand() === "focus") {
+        const ids = this.navIds ?? [], viewed = `ag-${shared("t3-agents.rows")?.view ?? focused()?.agent}`;
+        this.fs.last = null;
+        enter(this, cx, ids.includes(viewed) ? viewed : ids[0] ?? "ag-sort");
+      }
     });
     this.folded = JSON.parse(localStorage.getItem("folded") ?? "{}");
     // Each agent's last state and when it changed (ms), kept across restarts.
@@ -215,6 +221,26 @@ export default class Agents extends View {
     return { sort, list, all, shown, ps, now, viewing, byPriority, own, shownStatus, pinned, groups };
   }
 
+  // nvim keys on the list: j/k (and arrows) move between agents, gg/G ends, l/enter/right go to the agent's
+  // space, tab and pane with the keyboard, h/esc back to the terminals on the left.
+  navKey(e, cx) {
+    const k = e.keystroke, id = onStop(this), ids = this.navIds ?? [];
+    if (!id) return;
+    const i = ids.indexOf(id), go = (n) => {
+      const to = ids[Math.max(0, Math.min(ids.length - 1, n))], h = to && this.fs.handles.get(to);
+      if (h) { h.focus(); cx.notify(); }
+    };
+    const g = this.g; this.g = 0;
+    if (k === "j" || k === "down") go(i < 0 ? 0 : i + 1);
+    else if (k === "k" || k === "up") go(i < 0 ? 0 : i - 1);
+    else if (k === "shift-g" || e.key_char === "G") go(ids.length - 1);
+    else if (k === "g") { if (g && Date.now() - g < 600) go(0); else this.g = Date.now(); }
+    else if ((k === "l" || k === "right" || k === "enter") && id.startsWith("ag-") && id !== "ag-sort") { focusAgent(id.slice(3)); run("pane.focus", { terminal: id.slice(3) }); }
+    else if (k === "h" || k === "left" || k === "escape") run("pane.go", { direction: "left" });
+    else return;
+    cx.stop_propagation();
+  }
+
   render(cx) {
     const t = theme();
     if (props()?.sortMenu) return this.sortMenu(t);
@@ -234,9 +260,11 @@ export default class Agents extends View {
       if (this.detailsOut === gone) this.detailsOut = null;
     }
     const rows = entries.map((e) => flying(this, e.key, e.el));
+    this.navIds = entries.filter((e) => !e.key.startsWith("sub-") && !e.key.startsWith("m:")).map((e) => `ag-${e.key}`);
 
     return focusRoot(this, v_flex()
       .id("t3-agents-root")
+      .on_key_down((e, cx) => this.navKey(e, cx))
       .size_full()
       .min_h(0)
       .bg(t.chrome)

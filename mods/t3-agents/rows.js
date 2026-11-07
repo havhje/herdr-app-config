@@ -296,7 +296,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     return stop(view, t, g.id, hoverKept(view, "overGroup", g.id, base
       .id(g.id)
       .role("button").accessibility_label(`${open ? "Collapse" : "Expand"} ${g.label}`)
-      .on_click((_e, cx) => view.toggleFold(g.id, cx, g.id === "sec-1"))));
+      .on_click((_e, cx) => view.toggleFold(g.id, cx, false))));
   };
   // A space's group, as T3's project folder: its mark and name; closed, how many it hides and a dot if one of them wants you.
   // Right-click: the space's menu, as in Spaces.
@@ -328,7 +328,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
   };
   // A closed group still shows the row you're on, as T3's route row, and hints at the rest.
   const entries = groups.flatMap((g, i) => {
-    const open = !view.isFolded(g.id, g.id === "sec-1");
+    const open = !view.isFolded(g.id, false);
     const head = (ghost) => g.space ? div().flex_none().when(i > 0, (el) => el.pt(HEAD_GAP)).child(folder(g, open, ghost)) : shelf(g, open, ghost);
     return [{ key: `m:${g.id}`, h: HEAD + STACK + (g.space && i ? HEAD_GAP : 0), el: head(false), ghost: () => head(true) },
       ...(open ? g.members : g.members.filter(viewing)).flatMap(withKids)];
