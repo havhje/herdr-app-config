@@ -1,15 +1,6 @@
-import { View, div, svg, image } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
-import { namer, programOf } from "./name.js";
-import { tip, glow } from "./tip.js";
-
-// T3's status marks: spinner while working, a "!" badge when it needs you, a dot when done.
-const mark = (t, s) => s === "working" ? svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)
-  : s === "blocked" ? div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!")
-  : div().size(6).flex_none().rounded_full().bg(t.done);
-// The pane a tab is named after: its agent, else its focused pane, else its first.
-const leadOf = (mine) => mine.find(p => p.status != null) ?? mine.find(p => p.focused) ?? mine[0];
+import { spaces, panes, run, theme, shared, setShared, layout, settings, nextCommand, focused, exec } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -21,9 +12,42 @@ function find(node, id) {
 }
 
 export default class Tabs extends View {
-  init() {
-    this.pressed = null;
+  init(_props, cx) {
+    // ctrl-space (keys.json: lite-tabs.leader) shows the leader menu under Agents; it hides itself.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        if (await nextCommand() !== "leader") continue;
+        // The leader sits in the sidebar: a hidden sidebar shows for it, and the leader hides it again on close.
+        const bar = find(layout(), "sidebar");
+        setShared("leader.open", { gen: Date.now(), pane: focused()?.pane ?? null, sidebarHidden: Boolean(bar?.hidden) });
+        if (bar?.hidden) run("layout.show", { id: "sidebar" });
+        run("layout.show", { id: "leader" });
+        // Once it's shown (commands reach shown copies only), hand it the keyboard.
+        cx.timer.after(60, () => run("leader.focus"));
+      }
+    });
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+    // Worktree buffers show their branch: space id -> branch, for linked checkouts only. Polled gently.
+    this.worktrees = {};
+    this.checkWorktrees(cx);
+    cx.timer.every(10000, (cx) => this.checkWorktrees(cx));
+  }
+
+  // A space is a worktree when its git dir isn't its top's own .git (as t3-menu's checkout()).
+  checkWorktrees(cx) {
+    cx.spawn(async (cx) => {
+      const next = {}, ps = panes();
+      for (const s of spaces()) {
+        const tabs = new Set((s.tabs ?? []).map((c) => c.id));
+        const cwd = ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
+        if (!cwd) continue;
+        const r = await exec("sh", ["-c", 'git rev-parse --show-toplevel --path-format=absolute --git-common-dir && git branch --show-current'], { cwd, on: s.machine ?? undefined }).catch(() => null);
+        if (r?.code !== 0) continue;
+        const [top, common, branch] = r.stdout.split("\n");
+        if (common !== `${top}/.git`) next[s.id] = branch || "detached";
+      }
+      if (JSON.stringify(next) !== JSON.stringify(this.worktrees)) { this.worktrees = next; cx.notify(); }
+    });
   }
 
   // The side panel is remembered per space: switching shows that space's choice
@@ -54,74 +78,27 @@ export default class Tabs extends View {
     localStorage.setItem("panels", JSON.stringify(this.panels));
   }
 
+  // Spaces as nvim's bufferline: one cell per space, the shown one on the editor ground with an
+  // accent bar on its left. Nothing to click: H/L in NORMAL (modes mod) or alt-1..9 switch.
   render() {
-    const t = theme();
-    const space = spaces().find(p => p.active);
-    const shown = space?.tabs ?? [];
-    const stop = (_e, cx) => cx.stop_propagation();
-    // T3's ghost buttons: no ground until hovered, radius 8; icon and text light up together (a hover style doesn't reach an svg).
-    const lit = (id, on) => on || this.hot === id ? t.foreground : t.muted;
-    const button = (id, glyph, label, action, { key, size = 24 } = {}) => tip(this, t, id, label,
-      div().id(id).size(size).flex_none().flex().items_center().justify_center().rounded(8).text_color(lit(id)).hover(s => s.bg(t.hover)).on_hover(glow(this, id))
-        .on_mouse_down("left", stop).on_click(action).child(glyph), { action: key, below: true });
-    const ps = panes(), nameFor = namer();
-    const item = (c, i) => {
-      const lead = leadOf(ps.filter(p => p.tab === c.id));
-      const program = lead && programOf(lead);
-      const name = c.named ? c.name : lead ? nameFor(lead) : "Terminal";
-      const status = c.status === "working" || c.status === "blocked" || c.status === "done" ? c.status : null;
-      const over = this.overTab === c.id;
-      const glyph = !program?.icon ? svg("mods/lite-tabs/icons/terminal.svg").size(12).text_color(t.muted)
-        : program.tint ? svg(program.icon).size(12).text_color(t.muted) : image(program.icon).size(12);
-      // T3's slim tab: 24px, radius 8, 12px text; active on `selected`, the rest muted with no ground.
-      return h_flex().id(`tab-${c.id}`).h(24).min_w(96).max_w(240).pl(6).pr(4).gap(2).rounded(8).items_center().flex_none().text_size(12)
-        .bg(c.active ? t.selected : t.chrome).text_color(c.active || over ? t.foreground : t.muted)
-        .when(!c.active, el => el.hover(s => s.bg(t.hover)))
-        .on_hover((on, cx) => { if (on) this.overTab = c.id; else if (this.overTab === c.id) this.overTab = null; cx.notify(); })
-        .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
-        .on_mouse_up("left", () => {
-          const from = this.pressed; this.pressed = null;
-          if (from !== null && from !== i) run("tab.move", { id: shown[from].id, index: space.tabs.findIndex(x => x.id === c.id) + 1 });
-          else run("tab.select", { id: c.id });
-        })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
-        .child(div().size(16).flex_none().flex().items_center().justify_center().child(glyph))
-        .child(div().flex_1().min_w(0).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(status != null, el => el.child(div().size(16).flex_none().flex().items_center().justify_center().child(mark(t, status))))
-        // The × slot is always there so a hover doesn't shift the bar; the × shows on the active or hovered tab.
-        // Its label waits 500ms, so a straight click never meets it; the key closes the active tab only.
-        .child(tip(this, t, `close-${c.id}`, "Close tab", div().id(`close-${c.id}`).size(16).flex_none().flex().items_center().justify_center().rounded(4)
-          .when(c.active || over, el => el.text_color(t.foreground).hover(s => s.bg(t.raised))
-            .on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); })
-            .child(svg("mods/lite-tabs/icons/x.svg").size(12))), { action: c.active ? "tab.close" : undefined, below: true, delay: 500, off: !(c.active || over) }));
-    };
-    const root = layout(), sidebar = find(root, "sidebar"), w = window();
-    // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
-    const lightsPadding = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
-      ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
-      : 10;
-    const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = shared("workspace.panels") ?? ["files", "changes"];
-    this.syncPanel(space, panel, body, enabled);
-    const panelButton = (id, label, icon) => {
-      const on = panel && !panel.hidden && body?.active === id, bid = `panel-${id}`;
-      return tip(this, t, bid, on ? `Hide ${label}` : `Show ${label}`, h_flex().id(bid).h(24).px(8).gap(6).flex_none().items_center().rounded(8)
-        .text_size(12).text_color(lit(bid, on)).hover(s => s.bg(t.hover))
-        .on_hover(glow(this, bid)).on_mouse_down("left", stop)
-        .on_click(() => {
-          if (on) run("layout.hide", { id: "panel" });
-          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
-        }).child(svg(icon).size(14).flex_none()).child(label), { below: true });
-    };
-    return h_flex().size_full().min_w(0).pl(lightsPadding).pr(12).gap(4).items_center().bg(t.chrome).border_b(1).border_color(t.border)
-      .on_mouse_up("left", () => { this.pressed = null; })
-      .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children(shown.map(item)))
-      .child(button("tab-new", svg("mods/lite-tabs/icons/plus.svg").size(14), "New tab", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
-      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/lite-tabs/icons/file.svg")))
-      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/lite-tabs/icons/git-compare.svg")))
-      .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/lite-tabs/win-min.svg").size(16) : "−", "Minimize", () => run("window.minimize"), { size: 28 }))
-        .child(button("maximize", w.platform === "windows" ? svg(`mods/lite-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", w.maximized ? "Restore" : "Maximize", () => run("window.maximize"), { size: 28 }))
-        .child(button("close-window", w.platform === "windows" ? svg("mods/lite-tabs/win-close.svg").size(16) : svg("mods/lite-tabs/icons/x.svg").size(16), "Close window", () => run("window.close"), { size: 28 })));
+    const t = theme(), root = layout(), all = spaces(), font = settings().font ?? "JetBrains Mono";
+    // <leader>bb (leader mod) goes back to the space shown before this one.
+    const now = all.find(p => p.active)?.id;
+    if (now && this.lastActive && now !== this.lastActive) setShared("leader.prevSpace", this.lastActive);
+    this.lastActive = now;
+    this.syncPanel(all.find(p => p.active), find(root, "panel"), find(root, "panel-body"), shared("workspace.panels") ?? ["files", "changes"]);
+    const mark = (s) => s === "working" ? div().text_color(t.working).child("●")
+      : s === "blocked" ? div().text_color(t.blocked).child("!")
+      : s === "done" ? div().text_color(t.done).child("●") : null;
+    const cell = (p) => h_flex().h_full().flex_none().items_center().gap(6).pr(14)
+      .bg(p.active ? t.background : t.chrome).border_r(1).border_color(t.border)
+      .child(div().w(10).text_color(p.active ? t.accent : t.chrome).child("▎"))
+      .child(div().text_color(t.dim).child(`${p.index}`))
+      .child(div().max_w(200).truncate().text_color(p.active ? t.foreground : t.muted).when(p.active, el => el.font_bold()).child(p.name))
+      .when(Boolean(this.worktrees[p.id]), el => el.child(div().max_w(160).truncate().text_color(t.ansi5).child(`:${this.worktrees[p.id]}`)))
+      .when(mark(p.status) != null, el => el.child(mark(p.status)));
+    return h_flex().size_full().min_w(0).items_center().bg(t.chrome).border_b(1).border_color(t.border)
+      .font_family(font).text_size(13).overflow_x_hidden()
+      .children(all.map(cell));
   }
 }

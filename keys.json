@@ -58,7 +58,10 @@
     "ctrl-shift-z": "pane.zoom",
     "ctrl-shift-l": "layout.switch",
     "f2": "tab.rename",
-    "shift-f2": "space.rename"
+    "shift-f2": "space.rename",
+    "ctrl-h": "pane.go:left",
+    "ctrl-l": "pane.go:right",
+    "ctrl-space": "lite-tabs.leader"
   },
   "terminal": {
     "ctrl-backspace": "send:\u0017",

@@ -3,10 +3,11 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, spaces, focused, theme, layout, shared, setShared, setAgentOrder, settings, openOverlay, closeOverlay, props, nextCommand } from "herdr";
+import { agents, terminals, panes, spaces, focused, theme, layout, shared, setShared, setAgentOrder, settings, openOverlay, closeOverlay, props, nextCommand, run } from "herdr";
 import { notNews, ownStatus, subAgents, treeStatus } from "./tree.js";
 import { glow, tip } from "./tip.js";
-import { stopsInit, stopsEnd, stop, focusRoot, enter } from "./focus.js";
+import { stopsInit, stopsEnd, stop, focusRoot, enter, onStop } from "./focus.js";
+import { focusAgent } from "./zoom.js";
 import { menuJump } from "./list.js";
 import { MOTION, planMotion, flying, leavingRows } from "./motion.js";
 import { agentEntries, agentStatus, STACK, RANK, SECTION } from "./rows.js";
@@ -33,7 +34,12 @@ export default class Agents extends View {
     stopsInit(this, cx);
     // pane.go onto this list (mod.json's "focusable"): the keyboard starts at the heading's button.
     cx.spawn(async (cx) => {
-      for (;;) if (await nextCommand() === "focus") enter(this, cx, "ag-sort");
+      // nvim feel: it lands on the agent you're viewing (else the first), and j/k walk the agents (navKey).
+      for (;;) if (await nextCommand() === "focus") {
+        const ids = this.navIds ?? [], viewed = `ag-${shared("t3-agents.rows")?.view ?? focused()?.agent}`;
+        this.fs.last = null;
+        enter(this, cx, ids.includes(viewed) ? viewed : ids[0] ?? "ag-sort");
+      }
     });
     this.folded = JSON.parse(localStorage.getItem("folded") ?? "{}");
     // Each agent's last state and when it changed (ms), kept across restarts.
@@ -158,7 +164,9 @@ export default class Agents extends View {
 
   compute() {
     const sort = sortOf();
+    // <leader>ai hides idle agents (shared "agents.hideIdle"); the one you're on and pinned ones stay.
     let list = agents();
+    if (shared("agents.hideIdle")) list = list.filter((a) => a.status !== "idle" || a.focused || this.pins.includes(a.address));
     this.listed = new Map(list.map((a) => [a.address, a.status]));
     const all = terminals();
     // A mod pane has no agent of its own, and Herdr's is then the chosen one, else the first of all: it counts only in that tab, as in the inbox.
@@ -215,6 +223,26 @@ export default class Agents extends View {
     return { sort, list, all, shown, ps, now, viewing, byPriority, own, shownStatus, pinned, groups };
   }
 
+  // nvim keys on the list: j/k (and arrows) move between agents, gg/G ends, l/enter/right go to the agent's
+  // space, tab and pane with the keyboard, h/esc back to the terminals on the left.
+  navKey(e, cx) {
+    const k = e.keystroke, id = onStop(this), ids = this.navIds ?? [];
+    if (!id) return;
+    const i = ids.indexOf(id), go = (n) => {
+      const to = ids[Math.max(0, Math.min(ids.length - 1, n))], h = to && this.fs.handles.get(to);
+      if (h) { h.focus(); cx.notify(); }
+    };
+    const g = this.g; this.g = 0;
+    if (k === "j" || k === "down") go(i < 0 ? 0 : i + 1);
+    else if (k === "k" || k === "up") go(i < 0 ? 0 : i - 1);
+    else if (k === "shift-g" || e.key_char === "G") go(ids.length - 1);
+    else if (k === "g") { if (g && Date.now() - g < 600) go(0); else this.g = Date.now(); }
+    else if ((k === "l" || k === "right" || k === "enter") && id.startsWith("ag-") && id !== "ag-sort") { focusAgent(id.slice(3)); run("pane.focus", { terminal: id.slice(3) }); }
+    else if (k === "h" || k === "left" || k === "escape") run("pane.go", { direction: "left" });
+    else return;
+    cx.stop_propagation();
+  }
+
   render(cx) {
     const t = theme();
     if (props()?.sortMenu) return this.sortMenu(t);
@@ -234,9 +262,11 @@ export default class Agents extends View {
       if (this.detailsOut === gone) this.detailsOut = null;
     }
     const rows = entries.map((e) => flying(this, e.key, e.el));
+    this.navIds = entries.filter((e) => !e.key.startsWith("sub-") && !e.key.startsWith("m:")).map((e) => `ag-${e.key}`);
 
     return focusRoot(this, v_flex()
       .id("t3-agents-root")
+      .on_key_down((e, cx) => this.navKey(e, cx))
       .size_full()
       .min_h(0)
       .bg(t.chrome)
@@ -251,29 +281,10 @@ export default class Agents extends View {
             .flex_none()
             .items_center()
             .justify_between()
-            .child(div().text_size(12).font_medium().text_color(t.muted).child("Agents"))
-            .child(
-              tip(this, t, "ag-sort", `Sort agents: ${sort.label}`, stop(this, t, "ag-sort", div()
-                .id("ag-sort")
-                .size(28).flex_none().flex().items_center().justify_center().rounded(8)
-                .role("button").accessibility_label("Sort agents")
-                .text_color(this.hot === "ag-sort" ? t.foreground : t.dim)
-                .hover((s) => s.bg(t.hover))
-                .on_hover(glow(this, "ag-sort"))
-                .on_mouse_down("left", (e) => { this.sortFrom = e.bounds; })
-                .on_click((_e, cx) => {
-                  this.hot = null; // The menu covers it, before the pointer can report leaving it.
-                  // Hung from the button, right edges together, as T3's menus. No press (the keyboard), the app's default.
-                  const b = this.sortFrom, z = Number(settings()?.zoom) || 1;
-                  this.sortFrom = null;
-                  openOverlay({ mod: "t3-agents", kind: "popup", width: SORT_WIDTH, height: 140, ...(b ? { at: { x: b.x + b.width - SORT_WIDTH * z, y: b.y + b.height + 4 * z } } : {}), props: { sortMenu: true } });
-                  cx.notify();
-                })
-                .child(svg(`mods/t3-agents/icons/${sort.icon}.svg`).size(16)), 8)),
-            ),
+            .child(div().text_size(12).font_medium().text_color(t.muted).child(shared("agents.hideIdle") ? "Agents · idle hidden" : "Agents"))
       )
       .when(list.length === 0, (el) =>
-        el.child(div().px(16).py(24).text_center().text_size(12).line_height("16px").text_color(t.dim).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
+        el.child(div().px(16).py(24).text_center().text_size(12).line_height("16px").text_color(t.dim).child(shared("agents.hideIdle") ? "No busy agents. Idle ones are hidden (leader a i)." : "No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
       )
       .child(v_flex().id("ag-list").flex_1().min_h(0).px(8).pb(8).overflow_y_scroll()
         // The rows in one box that scrolls, so the leaving ones placed in it scroll with them.

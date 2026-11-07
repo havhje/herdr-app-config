@@ -92,7 +92,7 @@ function agentSubRow(view, t, s, shown, card, ghost) {
       cx.notify();
       run("terminal.peek", { terminal: k.address });
     })
-    .when([view.hovered, view.details, view.detailsOut].includes(rowId), (el) => el.child(card(name, rowId))), 6);
+    , 6);
 }
 
 export function agentStatus(view, t, a, note = "", id) {
@@ -188,28 +188,6 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     const offer = !ghost && (view.hovered === a.address || within(view, [rowId, pinId, `fold-${a.address}`]));
     // As T3's rows: what you're on or what wants you leads; the rest recede until hovered, a working one fainter still.
     const leads = on || offer || st === "blocked" || st === "done";
-    // Over the time's slot on hover, as in the shipped list; the two cross-fade, as T3's corner. Faded out it's no button.
-    const pin = () => div().id(pinId)
-      .size(24).flex_none().flex().items_center().justify_center()
-      .rounded(6)
-      .opacity(offer ? 1 : 0).transition("opacity", MOTION)
-      .when(offer, (el) => stop(view, t, pinId, el.role("button")
-        .accessibility_label(isPinned ? "Unpin" : "Pin")
-        .on_hover(glow(view, pinId))
-        .on_click((_e, cx) => {
-          cx.stop_propagation();
-          // The row's about to move from under the pointer.
-          view.hovered = view.hot = null;
-          detailsFor(view, null, cx);
-          setShared("agents.pins", isPinned ? view.pins.filter((p) => p !== a.address) : [...view.pins, a.address]);
-          // A pin ends a snooze. Here, not in the Inbox: it may not have started yet.
-          if (!isPinned && all.find((k) => k.address === a.address)?.labels?.snoozed) cx.spawn(async () => {
-            const r = await hc(["label", a.address, "snoozed="]).catch((e) => ({ code: 1, stderr: String(e) }));
-            if (r.code !== 0) notify({ title: "Couldn't update the agent", body: r.stderr.trim(), level: "error" });
-          });
-          cx.notify();
-        }), 6))
-      .child(svg(`mods/t3-agents/icons/${isPinned ? "pin-off" : "pin"}.svg`).size(12).flex_none().text_color(lit(pinId)));
     // A row leads with what the agent is on; an automatic tab number says nothing.
     // Without a space header above (priority, pinned) the space follows, dim, and gives way first.
     const full = byPriority || isPinned;
@@ -220,7 +198,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     const when = view.since(a);
     const lead = h_flex().size(16).flex_none().items_center().justify_center().when(Boolean(pic), el => el.child(pic));
     const server = svg("mods/t3-agents/icons/server.svg").size(14).flex_none().text_color(t.dim);
-    const time = div().flex_none().text_size(12).text_color(t.dim).opacity(offer ? 0 : 1).transition("opacity", MOTION).when(Boolean(when), el => el.child(duration(now - when)));
+    const time = div().flex_none().text_size(12).text_color(t.dim).opacity(1).transition("opacity", MOTION).when(Boolean(when), el => el.child(duration(now - when)));
     const base = h_flex()
       .relative()
       .w_full().min_w(0)
@@ -247,8 +225,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
         // The time and the pin share one slot, T3's corner, so hovering moves nothing else.
         .child(ghost ? h_flex().h(24).min_w(32).flex_none().items_center().justify_end().child(time)
           : h_flex().id(`when-${a.address}`).relative().h(24).min_w(32).flex_none().items_center().justify_end()
-            .child(time)
-            .child(div().absolute().top(0).right(0).child(tip(view, t, pinId, isPinned ? "Unpin" : "Pin", pin()))))
+            .child(time))
         .child(agentStatus(view, t, { status: st }, fromKid ? " (sub-agent)" : "", ghost ? undefined : `status-${a.address}`)));
     if (ghost) return base;
     return stop(view, t, rowId, base
@@ -256,7 +233,6 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
       .transition("opacity", MOTION)
       .role("button").accessibility_label(label(a) || a.program?.name || a.address)
       .when(!on, el => el.hover(s => s.bg(t.hover)).active(s => s.bg(t.selected)))
-      .when([view.hovered, view.details, view.detailsOut].includes(a.address), (el) => el.child(details(a, name)))
       .on_hover((over, cx) => {
         if (over) { view.hovered = a.address; detailsFor(view, a.address, cx); }
         else if (view.hovered === a.address) { view.hovered = null; detailsFor(view, null, cx); }
@@ -296,7 +272,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     return stop(view, t, g.id, hoverKept(view, "overGroup", g.id, base
       .id(g.id)
       .role("button").accessibility_label(`${open ? "Collapse" : "Expand"} ${g.label}`)
-      .on_click((_e, cx) => view.toggleFold(g.id, cx, g.id === "sec-1"))));
+      .on_click((_e, cx) => view.toggleFold(g.id, cx, false))));
   };
   // A space's group, as T3's project folder: its mark and name; closed, how many it hides and a dot if one of them wants you.
   // Right-click: the space's menu, as in Spaces.
@@ -328,7 +304,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
   };
   // A closed group still shows the row you're on, as T3's route row, and hints at the rest.
   const entries = groups.flatMap((g, i) => {
-    const open = !view.isFolded(g.id, g.id === "sec-1");
+    const open = !view.isFolded(g.id, false);
     const head = (ghost) => g.space ? div().flex_none().when(i > 0, (el) => el.pt(HEAD_GAP)).child(folder(g, open, ghost)) : shelf(g, open, ghost);
     return [{ key: `m:${g.id}`, h: HEAD + STACK + (g.space && i ? HEAD_GAP : 0), el: head(false), ghost: () => head(true) },
       ...(open ? g.members : g.members.filter(viewing)).flatMap(withKids)];

@@ -57,14 +57,14 @@
                       "id": "files",
                       "type": "block",
                       "content": {
-                        "mod": "files"
+                        "mod": "nvim-files"
                       }
                     },
                     {
                       "id": "changes",
                       "type": "block",
                       "content": {
-                        "mod": "changes"
+                        "mod": "nvim-changes"
                       }
                     }
                   ]
@@ -150,20 +150,6 @@
           "type": "column",
           "children": [
             {
-              "id": "spaces",
-              "type": "block",
-              "size": {
-                "weight": 1
-              },
-              "min": 90,
-              "content": {
-                "mod": "t3-spaces",
-                "props": {
-                  "newMenu": "t3-new-menu"
-                }
-              }
-            },
-            {
               "id": "agents",
               "type": "block",
               "size": {
@@ -172,6 +158,17 @@
               "min": 90,
               "content": {
                 "mod": "t3-agents"
+              }
+            },
+            {
+              "id": "leader",
+              "type": "block",
+              "hidden": true,
+              "size": {
+                "px": 330
+              },
+              "content": {
+                "mod": "leader"
               }
             }
           ]
@@ -209,5 +206,6 @@
   "traffic_lights": [
     16,
     13
-  ]
+  ],
+  "movable": false
 }
