@@ -94,7 +94,7 @@ export default class Tabs extends View {
     const now = all.find(p => p.active)?.id;
     if (now && this.lastActive && now !== this.lastActive) setShared("leader.prevSpace", this.lastActive);
     this.lastActive = now;
-    this.syncPanel(all.find(p => p.active), find(root, "panel"), find(root, "panel-body"), shared("workspace.panels") ?? ["files", "changes"]);
+    this.syncPanel(all.find(p => p.active), find(root, "panel"), find(root, "panel-body"), shared("workspace.panels") ?? ["files"]);
     const ps = panes(), shown = all.find((p) => p.active);
     const many = tabsShown(shown).length > 1, row = find(root, "tab-row");
     // A row never hidden has no `hidden` yet, so read it as a boolean.

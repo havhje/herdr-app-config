@@ -1,7 +1,8 @@
-// A lazy file browser for the focused pane's folder, with bounded read-only previews.
+// A lazy file browser for the focused pane's folder, with bounded read-only previews, and the git
+// changes on it: each changed file and folder shows its +/− lines and a bar for which way they go.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, v_virtual_list, VirtualListScrollHandle, Scrollbar, InputState, Input } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, nextCommand, run, notify } from "herdr";
+import { shared, spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, nextCommand, run, notify } from "herdr";
 
 function location() {
   const space = spaces().find(s => s.active), f = focused();
@@ -50,6 +51,8 @@ export default class Files extends View {
     this.input.on("submit", (_e, cx) => this.answer(cx));
     // nvim-style window moves: pane.go hands this copy the keyboard (mod.json focusable).
     cx.spawn(async (cx) => { for (;;) { if (await nextCommand() === "focus") { this.handle.focus(); cx.notify(); } } });
+    // <leader>gg asks for the changed-only view through shared "files.changed" (a time); one seen at start is old.
+    this.changedOnly = false; this.stats = {}; this.sums = {}; this.asked = shared("files.changed");
     this.saved = new Map();
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.refresh(cx);
@@ -85,7 +88,7 @@ export default class Files extends View {
       if (this.context) this.saved.set(this.context.key, { folders: this.folders, file: this.file });
       const saved = this.saved.get(next);
       this.context = { key: next, cwd, on }; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set(saved?.folders);
-      this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
+      this.pending = new Set(); this.marks = {}; this.stats = {}; this.sums = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
       this.loading = false;
       if (saved?.file) this.show(saved.file, cx);
     }
@@ -100,17 +103,41 @@ export default class Files extends View {
           await this.loadFolder(path, context);
         }
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
-        const marks = {};
+        const marks = {}, stats = {};
         if (top?.code === 0) {
+          const t = top.stdout.trim();
           // Writes nothing under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
-          const status = await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"], { cwd, on }).catch(() => null);
+          const git = (args) => exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false", ...args], { cwd: t, on }).catch(() => null);
+          const status = await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]);
           if (status?.code === 0) for (const entry of status.stdout.split("\0").filter(Boolean).slice(0, TOTAL)) {
             const xy = entry.slice(0, 2);
-            marks[`${top.stdout.trim()}/${entry.slice(3)}`] = xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
+            marks[`${t}/${entry.slice(3)}`] = xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
           }
+          // Lines added and removed against HEAD (staged and not); new untracked files count every line as added.
+          const head = await git(["rev-parse", "--verify", "-q", "HEAD"]);
+          const nums = head?.code === 0 ? [await git(["diff", "HEAD", "--numstat", "-z", "--no-renames"])] : [await git(["diff", "--cached", "--numstat", "-z", "--no-renames"]), await git(["diff", "--numstat", "-z", "--no-renames"])];
+          for (const r of nums) for (const entry of r?.code === 0 ? r.stdout.split("\0") : []) {
+            const [a, d, ...rest] = entry.split("\t");
+            if (!rest.length) continue;
+            const k = `${t}/${rest.join("\t")}`, o = stats[k] ?? { add: 0, del: 0 };
+            stats[k] = { add: o.add + (Number(a) || 0), del: o.del + (Number(d) || 0) };
+          }
+          const fresh = await exec("sh", ["-c", "git ls-files -z -o --exclude-standard | head -z -n 1000 | xargs -0 -r wc -l --"], { cwd: t, on }).catch(() => null);
+          for (const line of fresh?.code === 0 ? fresh.stdout.split("\n") : []) {
+            const m = /^\s*(\d+) (.+)$/.exec(line);
+            if (m && m[2] !== "total") stats[`${t}/${m[2]}`] = { add: Number(m[1]), del: 0 };
+          }
+          for (const k of Object.keys(marks)) stats[k] ??= { add: 0, del: 0 };
         }
         if (!this.current(context)) return;
-        this.marks = marks; this.error = null; this.watch(cwd, cx);
+        // Each folder sums the files under it, up to the git top.
+        const sums = {};
+        for (const [k, v] of Object.entries(stats)) for (let f = k; f.lastIndexOf("/") > 0;) {
+          f = f.slice(0, f.lastIndexOf("/"));
+          const o = sums[f] ?? (sums[f] = { add: 0, del: 0, count: 0 }); o.add += v.add; o.del += v.del; o.count++;
+          if (top && f === top.stdout.trim()) break;
+        }
+        this.marks = marks; this.stats = stats; this.sums = sums; this.error = null; this.watch(cwd, cx);
       } catch (e) { if (this.current(context)) this.error = String(e); }
       finally { if (this.context === context) this.loading = false; cx.notify(); }
     });
@@ -173,6 +200,7 @@ export default class Files extends View {
   // whose name matches (or path, when the filter has a "/"), with the folders above them.
   shown() {
     const f = this.filter.trim().toLowerCase();
+    if (!f && this.changedOnly) return this.changed();
     if (!f) return this.visible();
     if (!this.index) return [];
     if (this.cache?.f === f && this.cache.index === this.index) return this.cache.rows;
@@ -198,6 +226,32 @@ export default class Files extends View {
     };
     walk("", 0);
     this.cache = { f, index: this.index, rows };
+    return rows;
+  }
+
+  // The changed-only view (c): the changed files under the root and their folders, as a tree that
+  // opens and closes like the full one. Deleted files show here too.
+  changed() {
+    const root = this.root + "/", kids = new Map();
+    for (const k of Object.keys(this.stats)) {
+      if (!k.startsWith(root)) continue;
+      let path = k.slice(root.length), dir = false;
+      for (;;) {
+        const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+        if (!kids.has(parent)) kids.set(parent, new Map());
+        const had = kids.get(parent).has(path);
+        kids.get(parent).set(path, { name: path.slice(path.lastIndexOf("/") + 1), dir });
+        if (had || !parent) break;
+        path = parent; dir = true;
+      }
+    }
+    const rows = [], walk = (prefix, depth) => {
+      for (const [path, entry] of [...(kids.get(prefix) ?? [])].sort((a, b) => Number(b[1].dir) - Number(a[1].dir) || a[1].name.localeCompare(b[1].name))) {
+        rows.push({ path, entry, depth });
+        if (entry.dir && this.folders.has(path)) walk(path, depth + 1);
+      }
+    };
+    walk("", 0);
     return rows;
   }
 
@@ -336,6 +390,7 @@ export default class Files extends View {
     else if (k === "a") this.prompt("add", row, "", cx);
     else if (k === "r" && row) this.prompt("rename", row, row.entry.name, cx);
     else if (k === "d" && row) this.prompt("delete", row, "", cx);
+    else if (k === "c") { this.changedOnly = !this.changedOnly; cx.notify(); }
     else if (k === "escape" && this.filter) { this.filter = ""; cx.notify(); }
     else if (k === "escape") run("pane.go", { direction: "right" });
     // q closes the explorer, as in nvim.
@@ -358,20 +413,37 @@ export default class Files extends View {
   row({ path, entry, depth, found }, here, focused, t) {
     const open = found || this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
     return h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(7).cursor_pointer()
-      .when(here, el => el.bg(focused ? t.selected : t.hover)).hover(s => s.bg(t.hover))
+      // Changed files, and folders with changes under them, get a light shade so they stand out.
+      .when(!here && (entry.dir ? (this.sums[`${this.root}/${path}`]?.count ?? 0) > 0 : Boolean(mark)), el => el.bg(t.chrome))
+      // The cursor row: a faint tint, and only while the explorer has the keyboard.
+      .when(here && focused, el => el.bg(t.hover)).hover(s => s.bg(t.hover))
       .child(entry.dir ? svg(`mods/nvim-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(svg(`mods/nvim-files/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().child(entry.name))
-      .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark)));
+      .child(div().flex_1().min_w(0).truncate().text_color(mark === "D" ? t.dim : t.foreground).child(entry.name))
+      .children(this.diffstat(entry.dir ? this.sums[`${this.root}/${path}`] : this.stats[`${this.root}/${path}`], t))
+      .child(div().w(10).flex_none().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark ?? ""));
+  }
+
+  // +added −removed lines, in two right-aligned columns so they line up down the tree; a zero is left out.
+  diffstat(s, t, tight = false) {
+    if (!s || s.add + s.del === 0) return [];
+    const col = (el) => tight ? el : el.w(40);
+    return [
+      col(div()).flex_none().text_right().text_size(11).text_color(t.ansi2).child(s.add ? `+${s.add}` : ""),
+      col(div()).flex_none().text_right().text_size(11).text_color(t.ansi1).child(s.del ? `−${s.del}` : ""),
+    ];
   }
 
   render(cx) {
     if (key() !== this.context?.key) this.refresh(cx);
+    const asked = shared("files.changed");
+    if (asked !== this.asked) { this.asked = asked; this.changedOnly = true; this.handle.focus(); }
     const t = theme(), list = this.shown(), cur = this.at(list), focused = this.handle.is_focused();
     return v_flex().id("files").size_full().on_size_change((size, cx) => { this.height = size.height; })
       .on_key_down((e, cx) => this.key(e, cx)).min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(this.handle.is_focused() ? t.accent : t.border).track_focus(this.handle).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-        .child(div().font_semibold().child("Files"))
+        .child(div().font_semibold().child(this.changedOnly ? "Changed" : "Files"))
+        .children(!this.file && this.root ? this.diffstat(this.sums[this.root] ?? Object.keys(this.stats).filter((k) => k.startsWith(this.root + "/")).reduce((o, k) => ({ add: o.add + this.stats[k].add, del: o.del + this.stats[k].del }), { add: 0, del: 0 }), t, true) : [])
         // The whole folder path (home as ~), cut from the start when narrow so its own name stays.
         .child(div().flex_1().min_w(0).overflow_hidden().whitespace_nowrap().text_ellipsis_start().text_right().text_size(12).text_color(t.dim)
           .child(this.file ?? (this.root ?? "").replace(/^\/home\/[^/]+|^\/Users\/[^/]+/, "~"))))
@@ -381,7 +453,7 @@ export default class Files extends View {
           // Rows can't hold handlers in a virtual list: the click comes here with the row's key (its path).
           .on_item_click((path, cx) => { const r = list.find((x) => x.path === path); if (!r) return; this.cursor = path; r.entry.dir ? this.toggle(path, cx) : this.edit(path, cx); cx.notify(); }))
         .child(Scrollbar.vertical("files-tree").viewport_from_layout().absolute().inset_0())
-        .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().absolute().top(6).p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))))
+        .when(Boolean(this.error) || !list.length, el => el.child(div().absolute().top(6).p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? (this.changedOnly ? "No changes" : "No files") : "No folder"))))))
       .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))
       .when(!this.file && Boolean(this.ask || this.filter || this.note), el => el.child(this.cmdline(t)))
       .when(Boolean(this.file), el => el.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")));

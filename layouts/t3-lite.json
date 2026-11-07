@@ -29,13 +29,6 @@
               "content": {
                 "mod": "nvim-files"
               }
-            },
-            {
-              "id": "changes",
-              "type": "block",
-              "content": {
-                "mod": "nvim-changes"
-              }
             }
           ]
         }

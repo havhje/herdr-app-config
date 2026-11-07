@@ -81,16 +81,16 @@ The right-hand column holding the agents list and, when open, the leader menu.
 _Avoid_: drawer, rail
 
 **Side panel**:
-The left-hand column showing either the explorer or the changes list, remembered per buffer.
+The left-hand column showing the explorer, open or closed per buffer.
 _Avoid_: sidebar, drawer
 
 **Explorer**:
 The file tree in the side panel, driven by nvim keys.
 _Avoid_: files panel, file browser, tree
 
-**Changes list**:
-The git changes of the current buffer, shown in the side panel.
-_Avoid_: diff panel, git panel
+**Changes view**:
+The explorer showing only changed files and their folders, each with lines added and removed; `c` in the explorer or `<leader>gg` switches to it.
+_Avoid_: changes list, diff panel, git panel
 
 **Chrome**:
 Clickable buttons and handles drawn around the work; this setup removes it in favour of keys.

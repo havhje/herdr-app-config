@@ -51,7 +51,8 @@ const TREE = {
   } },
   e: ["Explorer (files)", panel("files")],
   g: { label: "+git", keys: {
-    g: ["Git changes", panel("changes")],
+    // The explorer's changed-only view (c in the explorer switches back).
+    g: ["Git changes", () => { run("layout.select", { stack: "panel-body", child: "files" }); run("layout.show", { id: "panel" }); setShared("files.changed", Date.now()); }],
     w: ["New worktree", worktree("new")],
     o: ["Open worktree", worktree("open")],
     d: ["Remove worktree (deletes its folder)", worktree("remove")],
