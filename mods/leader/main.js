@@ -32,10 +32,10 @@ const TREE = {
     r: ["Rename buffer", () => run("space.rename", { id: active()?.id })],
     N: ["New buffer", cmd("space.new")],
   } },
-  w: { label: "+windows", keys: {
+  w: { label: "+panes", keys: {
     v: ["Split right", cmd("pane.split", { direction: "right" })],
     s: ["Split below", cmd("pane.split", { direction: "down" })],
-    d: ["Delete window", cmd("pane.close")],
+    d: ["Close pane", cmd("pane.close")],
     m: ["Maximize toggle", cmd("pane.zoom")],
     h: ["Go left", cmd("pane.go", { direction: "left" })],
     j: ["Go down", cmd("pane.go", { direction: "down" })],
