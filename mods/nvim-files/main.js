@@ -169,16 +169,62 @@ export default class Files extends View {
     return out;
   }
 
-  // The rows to show: with a filter, the loaded entries whose name matches, and the folders above them.
+  // The rows to show: with a filter, every file and folder under the root (closed folders too)
+  // whose name matches (or path, when the filter has a "/"), with the folders above them.
   shown() {
-    const all = this.visible(), f = this.filter.trim().toLowerCase();
-    if (!f) return all;
-    const keep = new Set();
-    for (const r of all) if (r.entry.name.toLowerCase().includes(f)) {
-      keep.add(r.path);
-      for (let p = r.path; p.includes("/");) { p = p.slice(0, p.lastIndexOf("/")); keep.add(p); }
+    const f = this.filter.trim().toLowerCase();
+    if (!f) return this.visible();
+    if (!this.index) return [];
+    if (this.cache?.f === f && this.cache.index === this.index) return this.cache.rows;
+    const keep = new Set(), byPath = f.includes("/");
+    for (const [path] of this.index) if ((byPath ? path : path.slice(path.lastIndexOf("/") + 1)).toLowerCase().includes(f)) {
+      keep.add(path);
+      for (let p = path; p.includes("/");) { p = p.slice(0, p.lastIndexOf("/")); keep.add(p); }
     }
-    return all.filter((r) => keep.has(r.path));
+    // Rebuild the kept paths as a tree: folders first, then by name, as in the open tree.
+    const kids = new Map();
+    for (const path of keep) {
+      const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+      if (!kids.has(parent)) kids.set(parent, []);
+      kids.get(parent).push({ name: path.slice(path.lastIndexOf("/") + 1), dir: this.index.get(path) });
+    }
+    const rows = [], walk = (prefix, depth) => {
+      for (const entry of (kids.get(prefix) ?? []).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))) {
+        if (rows.length >= TOTAL) return;
+        const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+        rows.push({ path, entry, depth, found: true });
+        if (entry.dir) walk(path, depth + 1);
+      }
+    };
+    walk("", 0);
+    this.cache = { f, index: this.index, rows };
+    return rows;
+  }
+
+  // Every file under the root, for the filter: fd (honors .gitignore), else git, else find.
+  // Folders come from the files' paths (empty folders aren't found). Loaded when the filter opens.
+  loadIndex(cx) {
+    const context = this.context;
+    if (!this.root || this.indexing || this.indexKey === context.key) return;
+    this.indexing = true;
+    const script = 'if command -v fd >/dev/null 2>&1; then fd -0 --hidden --exclude .git -t f -t l --max-results 50000 .; ' +
+      'elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git ls-files -z -co --exclude-standard | head -z -n 50000; ' +
+      'else find . -name .git -prune -o \\( -type f -o -type l \\) -print0 | head -z -n 50000; fi';
+    cx.spawn(async cx => {
+      try {
+        const r = await exec("sh", ["-c", script], { cwd: this.root, on: this.on });
+        if (!this.current(context)) return;
+        const index = new Map();
+        for (let path of r.stdout.split("\0")) {
+          path = path.replace(/^\.\//, "");
+          if (!path) continue;
+          index.set(path, false);
+          for (let p = path; p.includes("/");) { p = p.slice(0, p.lastIndexOf("/")); if (index.get(p) === true) break; index.set(p, true); }
+        }
+        this.index = index; this.indexKey = context.key;
+      } catch (e) { if (this.current(context)) this.say(`Filter: ${e.message ?? e}`); }
+      finally { this.indexing = false; cx.notify(); }
+    });
   }
 
   // Opens a file in nvim in its own terminal window (Omarchy's default editor), outside Herdr.
@@ -286,7 +332,7 @@ export default class Files extends View {
         if (parent) this.move(list, list.findIndex((r) => r.path === parent), cx);
       }
     } else if (k === "p" && row && !row.entry.dir) this.show(row.path, cx);
-    else if (k === "/") this.prompt("filter", row, this.filter, cx);
+    else if (k === "/") { this.indexKey = null; this.loadIndex(cx); this.prompt("filter", row, this.filter, cx); }
     else if (k === "a") this.prompt("add", row, "", cx);
     else if (k === "r" && row) this.prompt("rename", row, row.entry.name, cx);
     else if (k === "d" && row) this.prompt("delete", row, "", cx);
@@ -305,12 +351,12 @@ export default class Files extends View {
     return h_flex().h(30).flex_none().px(12).gap(6).items_center().border_t(1).border_color(t.border).font_family(font).text_size(12)
       .when(Boolean(a), el => el.child(div().flex_none().text_color(a.kind === "delete" ? t.blocked : t.accent).child(label))
         .child(div().flex_1().min_w(0).child(Input.new(this.input).h(22).text_size(12).text_color(t.foreground))))
-      .when(!a && Boolean(this.filter), el => el.child(div().text_color(t.accent).child(`/${this.filter}`)).child(div().text_color(t.dim).child("esc clears")))
+      .when(!a && Boolean(this.filter), el => el.child(div().text_color(t.accent).child(`/${this.filter}`)).child(div().text_color(t.dim).child(this.indexing ? "searching…" : "esc clears")))
       .when(!a && !this.filter && Boolean(this.note), el => el.child(div().truncate().text_color(t.blocked).child(this.note)));
   }
 
-  row({ path, entry, depth }, here, focused, t) {
-    const open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
+  row({ path, entry, depth, found }, here, focused, t) {
+    const open = found || this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
     return h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(7).cursor_pointer()
       .when(here, el => el.bg(focused ? t.selected : t.hover)).hover(s => s.bg(t.hover))
       .child(entry.dir ? svg(`mods/nvim-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
