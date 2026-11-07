@@ -8,6 +8,9 @@
 !/layouts/
 !/mods/
 !/backgrounds/
+!/CLAUDE.md
+!/GLOSSARY.md
+!/docs/
 # Shipped mods: Herdr replaces them whole on start. Clone before editing.
 /mods/agents/
 /mods/changes/
