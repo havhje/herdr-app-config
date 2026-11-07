@@ -372,7 +372,9 @@ export default class Files extends View {
       .on_key_down((e, cx) => this.key(e, cx)).min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(this.handle.is_focused() ? t.accent : t.border).track_focus(this.handle).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Files"))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? "")))
+        // The whole folder path (home as ~), cut from the start when narrow so its own name stays.
+        .child(div().flex_1().min_w(0).overflow_hidden().whitespace_nowrap().text_ellipsis_start().text_right().text_size(12).text_color(t.dim)
+          .child(this.file ?? (this.root ?? "").replace(/^\/home\/[^/]+|^\/Users\/[^/]+/, "~"))))
       .when(!this.file, el => el.child(div().flex_1().min_h(0).relative().p(6)
         .child(v_virtual_list("files-tree", list.length, 28, (i) => list[i].path, (range) => list.slice(range.start, range.end).map((r, j) => this.row(r, range.start + j === cur, focused, t)))
           .track_scroll(this.scroll).size_full()
