@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, run, theme, shared, setShared, layout, settings, nextCommand, focused } from "herdr";
+import { spaces, panes, run, theme, shared, setShared, layout, settings, nextCommand, focused, exec } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -27,6 +27,27 @@ export default class Tabs extends View {
       }
     });
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+    // Worktree buffers show their branch: space id -> branch, for linked checkouts only. Polled gently.
+    this.worktrees = {};
+    this.checkWorktrees(cx);
+    cx.timer.every(10000, (cx) => this.checkWorktrees(cx));
+  }
+
+  // A space is a worktree when its git dir isn't its top's own .git (as t3-menu's checkout()).
+  checkWorktrees(cx) {
+    cx.spawn(async (cx) => {
+      const next = {}, ps = panes();
+      for (const s of spaces()) {
+        const tabs = new Set((s.tabs ?? []).map((c) => c.id));
+        const cwd = ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
+        if (!cwd) continue;
+        const r = await exec("sh", ["-c", 'git rev-parse --show-toplevel --path-format=absolute --git-common-dir && git branch --show-current'], { cwd, on: s.machine ?? undefined }).catch(() => null);
+        if (r?.code !== 0) continue;
+        const [top, common, branch] = r.stdout.split("\n");
+        if (common !== `${top}/.git`) next[s.id] = branch || "detached";
+      }
+      if (JSON.stringify(next) !== JSON.stringify(this.worktrees)) { this.worktrees = next; cx.notify(); }
+    });
   }
 
   // The side panel is remembered per space: switching shows that space's choice
@@ -74,6 +95,7 @@ export default class Tabs extends View {
       .child(div().w(10).text_color(p.active ? t.accent : t.chrome).child("▎"))
       .child(div().text_color(t.dim).child(`${p.index}`))
       .child(div().max_w(200).truncate().text_color(p.active ? t.foreground : t.muted).when(p.active, el => el.font_bold()).child(p.name))
+      .when(Boolean(this.worktrees[p.id]), el => el.child(div().max_w(160).truncate().text_color(t.ansi5).child(`:${this.worktrees[p.id]}`)))
       .when(mark(p.status) != null, el => el.child(mark(p.status)));
     return h_flex().size_full().min_w(0).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .font_family(font).text_size(13).overflow_x_hidden()

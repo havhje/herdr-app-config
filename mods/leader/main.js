@@ -2,7 +2,7 @@
 // It lists the keys that can come next; a group (b, w, t) shows its own keys; Esc or backspace goes back/closes.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, spaces, layout, shared, setShared, settings, focused, nextCommand } from "herdr";
+import { theme, run, spaces, panes, layout, shared, setShared, settings, focused, nextCommand, openOverlay } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -18,6 +18,10 @@ const panel = (child) => () => {
 };
 const cmd = (name, args) => () => run(name, args);
 const active = () => spaces().find((s) => s.active);
+// Herdr's worktree dialog (mods/worktree) for the shown buffer: new, open (pick a checkout) or remove.
+// Remove asks first, closes the buffer and runs git worktree remove; the branch stays.
+const worktree = (action) => () => openOverlay({ mod: "worktree", kind: "dialog", ...(action === "open" ? { width: 560, height: 480 } : { width: 460, height: 280 }),
+  props: { space: active()?.id, folder: panes().find((p) => p.focused)?.cwd, action } });
 
 const TREE = {
   b: { label: "+buffer", keys: {
@@ -46,7 +50,12 @@ const TREE = {
     h: ["Prev tab", cmd("tab.prev")],
   } },
   e: ["Explorer (files)", panel("files")],
-  g: ["Git changes", panel("changes")],
+  g: { label: "+git", keys: {
+    g: ["Git changes", panel("changes")],
+    w: ["New worktree", worktree("new")],
+    o: ["Open worktree", worktree("open")],
+    d: ["Remove worktree (deletes its folder)", worktree("remove")],
+  } },
   a: { label: "+agents", keys: {
     // Shown: hide the sidebar. Hidden (the leader showed it just for itself): keep it and give the list the keyboard.
     a: ["Toggle agents", (open) => {
@@ -62,6 +71,12 @@ const TREE = {
     n: ["Next agent", cmd("agent.next")],
     N: ["Prev agent", cmd("agent.prev")],
     f: ["Focus agents list", cmd("t3-agents.focus")],
+  } },
+  u: { label: "+ui", keys: {
+    s: ["Settings", cmd("app.settings")],
+    m: ["Add machine", cmd("mod.open", { name: "machine-add" })],
+    l: ["Next layout", cmd("layout.switch")],
+    t: ["Theme", cmd("app.settings", { section: "look" })],
   } },
   f: ["Find in terminal", cmd("terminal.search")],
   ":": ["Command palette", cmd("app.palette")],
