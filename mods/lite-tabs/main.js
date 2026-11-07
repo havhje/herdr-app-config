@@ -17,7 +17,10 @@ export default class Tabs extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         if (await nextCommand() !== "leader") continue;
-        setShared("leader.open", { gen: Date.now(), pane: focused()?.pane ?? null });
+        // The leader sits in the sidebar: a hidden sidebar shows for it, and the leader hides it again on close.
+        const bar = find(layout(), "sidebar");
+        setShared("leader.open", { gen: Date.now(), pane: focused()?.pane ?? null, sidebarHidden: Boolean(bar?.hidden) });
+        if (bar?.hidden) run("layout.show", { id: "sidebar" });
         run("layout.show", { id: "leader" });
         // Once it's shown (commands reach shown copies only), hand it the keyboard.
         cx.timer.after(60, () => run("leader.focus"));

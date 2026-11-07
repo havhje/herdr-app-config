@@ -164,7 +164,9 @@ export default class Agents extends View {
 
   compute() {
     const sort = sortOf();
+    // <leader>ai hides idle agents (shared "agents.hideIdle"); the one you're on and pinned ones stay.
     let list = agents();
+    if (shared("agents.hideIdle")) list = list.filter((a) => a.status !== "idle" || a.focused || this.pins.includes(a.address));
     this.listed = new Map(list.map((a) => [a.address, a.status]));
     const all = terminals();
     // A mod pane has no agent of its own, and Herdr's is then the chosen one, else the first of all: it counts only in that tab, as in the inbox.
@@ -279,7 +281,7 @@ export default class Agents extends View {
             .flex_none()
             .items_center()
             .justify_between()
-            .child(div().text_size(12).font_medium().text_color(t.muted).child("Agents"))
+            .child(div().text_size(12).font_medium().text_color(t.muted).child(shared("agents.hideIdle") ? "Agents · idle hidden" : "Agents"))
             .child(
               tip(this, t, "ag-sort", `Sort agents: ${sort.label}`, stop(this, t, "ag-sort", div()
                 .id("ag-sort")
@@ -301,7 +303,7 @@ export default class Agents extends View {
             ),
       )
       .when(list.length === 0, (el) =>
-        el.child(div().px(16).py(24).text_center().text_size(12).line_height("16px").text_color(t.dim).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
+        el.child(div().px(16).py(24).text_center().text_size(12).line_height("16px").text_color(t.dim).child(shared("agents.hideIdle") ? "No busy agents. Idle ones are hidden (leader a i)." : "No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
       )
       .child(v_flex().id("ag-list").flex_1().min_h(0).px(8).pb(8).overflow_y_scroll()
         // The rows in one box that scrolls, so the leaving ones placed in it scroll with them.

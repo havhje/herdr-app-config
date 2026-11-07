@@ -2,7 +2,7 @@
 // It lists the keys that can come next; a group (b, w, t) shows its own keys; Esc or backspace goes back/closes.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, spaces, layout, shared, settings, nextCommand } from "herdr";
+import { theme, run, spaces, layout, shared, setShared, settings, focused, nextCommand } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -47,7 +47,22 @@ const TREE = {
   } },
   e: ["Explorer (files)", panel("files")],
   g: ["Git changes", panel("changes")],
-  a: ["Agents", cmd("t3-agents.focus")],
+  a: { label: "+agents", keys: {
+    // Shown: hide the sidebar. Hidden (the leader showed it just for itself): keep it and give the list the keyboard.
+    a: ["Toggle agents", (open) => {
+      if (open?.sidebarHidden) run("t3-agents.focus");
+      else { run("layout.hide", { id: "sidebar" }); }
+    }, { keepSidebar: true }],
+    i: ["Toggle idle agents", () => setShared("agents.hideIdle", !shared("agents.hideIdle"))],
+    g: ["Toggle grouping (space/status)", () => setShared("agents.sort", shared("agents.sort") === "grouped" ? "priority" : "grouped")],
+    p: ["Pin/unpin agent", () => {
+      const a = focused()?.agent, pins = shared("agents.pins") ?? [];
+      if (a) setShared("agents.pins", pins.includes(a) ? pins.filter((p) => p !== a) : [...pins, a]);
+    }],
+    n: ["Next agent", cmd("agent.next")],
+    N: ["Prev agent", cmd("agent.prev")],
+    f: ["Focus agents list", cmd("t3-agents.focus")],
+  } },
   f: ["Find in terminal", cmd("terminal.search")],
   ":": ["Command palette", cmd("app.palette")],
   ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), [`Buffer ${n}`, cmd("space.select", { index: n })]])),
@@ -67,9 +82,10 @@ export default class Leader extends View {
   }
 
   // Hide again, and give the keyboard back to the pane we came from.
-  close() {
+  close(keepSidebar = false) {
     const open = shared("leader.open");
     run("layout.hide", { id: "leader" });
+    if (open?.sidebarHidden && !keepSidebar) run("layout.hide", { id: "sidebar" });
     if (open?.pane) run("pane.focus", { pane: open.pane });
   }
 
@@ -81,8 +97,9 @@ export default class Leader extends View {
     const entry = this.level().keys[k];
     if (!entry) return;
     if (!Array.isArray(entry)) { this.path.push(k); cx.notify(); return; }
-    this.close();
-    entry[1]();
+    const open = shared("leader.open");
+    this.close(Boolean(entry[2]?.keepSidebar));
+    entry[1](open);
   }
 
   level() {
