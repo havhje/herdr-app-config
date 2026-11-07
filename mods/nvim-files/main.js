@@ -1,7 +1,7 @@
 // A lazy file browser for the focused pane's folder, with bounded read-only previews.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, nextCommand } from "herdr";
+import { v_flex, h_flex, Editor, EditorState, v_virtual_list, VirtualListScrollHandle, Scrollbar, InputState, Input } from "gpui-base";
+import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, nextCommand, run, notify } from "herdr";
 
 function location() {
   const space = spaces().find(s => s.active), f = focused();
@@ -41,6 +41,13 @@ async function directory(path, on) {
 export default class Files extends View {
   init(_props, cx) {
     this.handle = cx.focus_handle();
+    // nvim (snacks explorer) keys: a cursor row, kept by path so refreshes don't move it.
+    this.scroll = VirtualListScrollHandle.new(); this.cursor = null; this.g = 0; this.height = 400;
+    // The command line at the bottom: / filter, a add, r rename, d delete (y/n). ask = { kind, row }.
+    this.filter = ""; this.ask = null; this.note = null;
+    this.input = InputState.new({ placeholder: "" });
+    this.input.on("change", (_e, cx) => { if (this.ask?.kind === "filter") { this.filter = this.input.value(); cx.notify(); } });
+    this.input.on("submit", (_e, cx) => this.answer(cx));
     // nvim-style window moves: pane.go hands this copy the keyboard (mod.json focusable).
     cx.spawn(async (cx) => { for (;;) { if (await nextCommand() === "focus") { this.handle.focus(); cx.notify(); } } });
     this.saved = new Map();
@@ -150,33 +157,186 @@ export default class Files extends View {
     });
   }
 
-  rows(prefix, depth, out, t) {
+  // The tree as shown, top to bottom: every entry of the root and of each open folder.
+  visible(prefix = "", depth = 0, out = []) {
     if (out.length >= TOTAL || depth > 40) return out;
     for (const entry of this.entries.get(prefix) ?? []) {
       if (out.length >= TOTAL) break;
-      const path = prefix ? `${prefix}/${entry.name}` : entry.name, open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
-      out.push(h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(7).cursor_pointer().hover(s => s.bg(t.hover))
-        .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
-        .child(entry.dir ? svg(`mods/nvim-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
-        .child(svg(`mods/nvim-files/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
-        .child(div().flex_1().min_w(0).truncate().child(entry.name))
-        .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark))));
-      if (entry.dir && open) this.rows(path, depth + 1, out, t);
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      out.push({ path, entry, depth });
+      if (entry.dir && this.folders.has(path)) this.visible(path, depth + 1, out);
     }
     return out;
   }
 
+  // The rows to show: with a filter, the loaded entries whose name matches, and the folders above them.
+  shown() {
+    const all = this.visible(), f = this.filter.trim().toLowerCase();
+    if (!f) return all;
+    const keep = new Set();
+    for (const r of all) if (r.entry.name.toLowerCase().includes(f)) {
+      keep.add(r.path);
+      for (let p = r.path; p.includes("/");) { p = p.slice(0, p.lastIndexOf("/")); keep.add(p); }
+    }
+    return all.filter((r) => keep.has(r.path));
+  }
+
+  // Opens a file in nvim in its own terminal window (Omarchy's default editor), outside Herdr.
+  edit(path, cx) {
+    if (this.on) { this.say("nvim outside Herdr works for this computer's files only"); cx.notify(); return; }
+    const full = `${this.root}/${path}`;
+    cx.spawn(async () => { try { await exec("omarchy-launch-editor", [full], { cwd: this.root }); } catch (e) { notify({ title: "Could not open nvim", body: String(e), level: "error" }); } });
+  }
+
+  say(text) { this.note = text; }
+
+  // The folder a new file goes in: the row's folder, or the folder holding the row.
+  base(row) {
+    if (!row) return "";
+    if (row.entry.dir) return row.path;
+    return row.path.includes("/") ? row.path.slice(0, row.path.lastIndexOf("/")) : "";
+  }
+
+  prompt(kind, row, value, cx) {
+    this.ask = { kind, row }; this.note = null;
+    this.input.set_value(value ?? "");
+    this.input.focus();
+    cx.notify();
+  }
+
+  done(cx) {
+    this.ask = null; this.input.set_value("");
+    this.handle.focus();
+    cx.notify();
+  }
+
+  // Enter in the command line.
+  answer(cx) {
+    const a = this.ask, text = this.input.value().trim(), root = this.root, on = this.on;
+    if (!a) return;
+    if (a.kind === "filter") { this.ask = null; this.handle.focus(); cx.notify(); return; }
+    this.done(cx);
+    if (!text) return;
+    const sh = async (args, after) => {
+      try {
+        const r = await exec(args[0], args.slice(1), { cwd: root, on });
+        if (r.code !== 0) throw new Error(r.stderr.trim() || `${args[0]} failed`);
+        after?.(); this.say(null);
+      } catch (e) { this.say(String(e.message ?? e)); }
+      this.refresh(cx);
+    };
+    cx.spawn(async () => {
+      if (a.kind === "add") {
+        const base = this.base(a.row), rel = base ? `${base}/${text}` : text, dir = text.endsWith("/");
+        if (base && a.row?.entry.dir && !this.folders.has(base)) this.toggle(base, cx);
+        const clean = rel.replace(/\/+$/, "");
+        await sh(dir ? ["mkdir", "-p", "--", clean] : ["sh", "-c", 'mkdir -p -- "$(dirname -- "$1")" && touch -- "$1"', "add", clean], () => { this.cursor = clean; });
+      } else if (a.kind === "rename") {
+        const parent = a.row.path.includes("/") ? a.row.path.slice(0, a.row.path.lastIndexOf("/")) : "", to = parent ? `${parent}/${text}` : text;
+        await sh(["mv", "-n", "--", a.row.path, to], () => { this.cursor = to; });
+      } else if (a.kind === "delete") {
+        if (!/^y(es)?$/i.test(text)) return;
+        await sh(["gio", "trash", "--", a.row.path]);
+      }
+    });
+  }
+
+  // Where the cursor is now; a path that's gone (folder closed, file deleted) falls back to the first row.
+  at(list) {
+    const i = list.findIndex((r) => r.path === this.cursor);
+    return i < 0 ? 0 : i;
+  }
+
+  move(list, i, cx) {
+    if (!list.length) return;
+    i = Math.max(0, Math.min(list.length - 1, i));
+    this.cursor = list[i].path;
+    this.scroll.scroll_to_item(i);
+    cx.notify();
+  }
+
+  key(e, cx) {
+    const k = e.keystroke, c = e.key_char;
+    // Typing in the command line: only Esc is ours (cancel; for a filter, clear it).
+    if (this.ask) {
+      if (e.key === "escape") { if (this.ask.kind === "filter") this.filter = ""; this.done(cx); cx.stop_propagation(); }
+      return;
+    }
+    // Preview open: q, h, esc or backspace go back to the tree.
+    if (this.file) {
+      if (["q", "h", "escape", "backspace"].includes(e.key) && !e.keystroke.includes("ctrl")) { this.show(null); cx.stop_propagation(); cx.notify(); }
+      return;
+    }
+    const list = this.shown(), i = this.at(list), row = list[i], page = Math.max(1, Math.floor(this.height / 28 / 2));
+    const g = this.g; this.g = 0;
+    if (k === "j" || k === "down") this.move(list, i + 1, cx);
+    else if (k === "k" || k === "up") this.move(list, i - 1, cx);
+    else if (k === "ctrl-d") this.move(list, i + page, cx);
+    else if (k === "ctrl-u") this.move(list, i - page, cx);
+    else if (c === "G" || k === "shift-g") this.move(list, list.length - 1, cx);
+    else if (k === "g") { if (g && Date.now() - g < 600) this.move(list, 0, cx); else this.g = Date.now(); }
+    else if ((k === "l" || k === "enter" || k === "right") && row) {
+      if (!row.entry.dir) this.edit(row.path, cx);
+      else if (!this.folders.has(row.path)) this.toggle(row.path, cx);
+      else this.move(list, i + 1, cx);
+    } else if ((k === "h" || k === "left") && row) {
+      if (row.entry.dir && this.folders.has(row.path)) this.toggle(row.path, cx);
+      else {
+        const parent = row.path.includes("/") ? row.path.slice(0, row.path.lastIndexOf("/")) : null;
+        if (parent) this.move(list, list.findIndex((r) => r.path === parent), cx);
+      }
+    } else if (k === "p" && row && !row.entry.dir) this.show(row.path, cx);
+    else if (k === "/") this.prompt("filter", row, this.filter, cx);
+    else if (k === "a") this.prompt("add", row, "", cx);
+    else if (k === "r" && row) this.prompt("rename", row, row.entry.name, cx);
+    else if (k === "d" && row) this.prompt("delete", row, "", cx);
+    else if (k === "escape" && this.filter) { this.filter = ""; cx.notify(); }
+    else if (k === "escape") run("pane.go", { direction: "right" });
+    // q closes the explorer, as in nvim.
+    else if (k === "q") { run("pane.go", { direction: "right" }); run("layout.hide", { id: "panel" }); }
+    else return;
+    cx.stop_propagation();
+  }
+
+  // nvim's command line: the question and its input, else the filter in use, else the last error.
+  cmdline(t) {
+    const a = this.ask, font = settings().font ?? "JetBrains Mono";
+    const label = !a ? null : a.kind === "filter" ? "/" : a.kind === "add" ? `Add in ${this.base(a.row) || "."}/:` : a.kind === "rename" ? `Rename ${a.row.entry.name} to:` : `Delete ${a.row.path}? (y/n)`;
+    return h_flex().h(30).flex_none().px(12).gap(6).items_center().border_t(1).border_color(t.border).font_family(font).text_size(12)
+      .when(Boolean(a), el => el.child(div().flex_none().text_color(a.kind === "delete" ? t.blocked : t.accent).child(label))
+        .child(div().flex_1().min_w(0).child(Input.new(this.input).h(22).text_size(12).text_color(t.foreground))))
+      .when(!a && Boolean(this.filter), el => el.child(div().text_color(t.accent).child(`/${this.filter}`)).child(div().text_color(t.dim).child("esc clears")))
+      .when(!a && !this.filter && Boolean(this.note), el => el.child(div().truncate().text_color(t.blocked).child(this.note)));
+  }
+
+  row({ path, entry, depth }, here, focused, t) {
+    const open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
+    return h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(7).cursor_pointer()
+      .when(here, el => el.bg(focused ? t.selected : t.hover)).hover(s => s.bg(t.hover))
+      .child(entry.dir ? svg(`mods/nvim-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
+      .child(svg(`mods/nvim-files/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
+      .child(div().flex_1().min_w(0).truncate().child(entry.name))
+      .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark)));
+  }
+
   render(cx) {
     if (key() !== this.context?.key) this.refresh(cx);
-    const t = theme();
-    return v_flex().id("files").size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(this.handle.is_focused() ? t.accent : t.border).track_focus(this.handle).text_color(t.foreground).text_size(13)
+    const t = theme(), list = this.shown(), cur = this.at(list), focused = this.handle.is_focused();
+    return v_flex().id("files").size_full().on_size_change((size, cx) => { this.height = size.height; })
+      .on_key_down((e, cx) => this.key(e, cx)).min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(this.handle.is_focused() ? t.accent : t.border).track_focus(this.handle).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))
         .child(div().font_semibold().child("Files"))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? "")))
-      .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().p(6).children(this.rows("", 0, [], t))
-        .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))
-        .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
+      .when(!this.file, el => el.child(div().flex_1().min_h(0).relative().p(6)
+        .child(v_virtual_list("files-tree", list.length, 28, (i) => list[i].path, (range) => list.slice(range.start, range.end).map((r, j) => this.row(r, range.start + j === cur, focused, t)))
+          .track_scroll(this.scroll).size_full()
+          // Rows can't hold handlers in a virtual list: the click comes here with the row's key (its path).
+          .on_item_click((path, cx) => { const r = list.find((x) => x.path === path); if (!r) return; this.cursor = path; r.entry.dir ? this.toggle(path, cx) : this.edit(path, cx); cx.notify(); }))
+        .child(Scrollbar.vertical("files-tree").viewport_from_layout().absolute().inset_0())
+        .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().absolute().top(6).p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))))
+      .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))
+      .when(!this.file && Boolean(this.ask || this.filter || this.note), el => el.child(this.cmdline(t)))
       .when(Boolean(this.file), el => el.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")));
   }
 }
