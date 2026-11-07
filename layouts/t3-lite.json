@@ -50,7 +50,7 @@
           "id": "tabs-row",
           "type": "row",
           "size": {
-            "px": 40
+            "px": 36
           },
           "resizable": false,
           "background": "chrome",
@@ -64,6 +64,34 @@
               "window_drag": true,
               "content": {
                 "mod": "lite-tabs"
+              }
+            }
+          ]
+        },
+        {
+          "id": "tab-row",
+          "type": "row",
+          "size": {
+            "px": 36
+          },
+          "resizable": false,
+          "background": "chrome",
+          "padding": [
+            0,
+            8
+          ],
+          "children": [
+            {
+              "id": "tab-strip",
+              "type": "block",
+              "size": {
+                "weight": 1
+              },
+              "content": {
+                "mod": "lite-tabs",
+                "props": {
+                  "role": "tabs"
+                }
               }
             }
           ]
@@ -141,7 +169,7 @@
             "mod": "lite-chrome"
           },
           "size": {
-            "px": 40
+            "px": 36
           },
           "window_drag": true
         },

@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, theme, shared, setShared, layout, settings, nextCommand, focused, exec } from "herdr";
+import { props, spaces, panes, run, theme, shared, setShared, layout, settings, nextCommand, focused, exec } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -13,6 +13,9 @@ function find(node, id) {
 
 export default class Tabs extends View {
   init(_props, cx) {
+    // A second copy (props {role:"tabs"}) draws only the tab row; the rest is the bufferline's job.
+    this.role = props()?.role ?? "buffers";
+    if (this.role === "tabs") return;
     // ctrl-space (keys.json: lite-tabs.leader) shows the leader menu under Agents; it hides itself.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -36,24 +39,17 @@ export default class Tabs extends View {
   // A space is a worktree when its git dir isn't its top's own .git (as t3-menu's checkout()).
   checkWorktrees(cx) {
     cx.spawn(async (cx) => {
-      const next = {}, ps = panes(); let git = null;
+      const next = {}, ps = panes();
       for (const s of spaces()) {
         const tabs = new Set((s.tabs ?? []).map((c) => c.id));
-        // The shown buffer follows the focused terminal, so git info matches where you are.
-        const cwd = (s.active && ps.find((p) => p.focused && p.cwd)?.cwd) || ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
+        const cwd = ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
         if (!cwd) continue;
         const r = await exec("sh", ["-c", 'git rev-parse --show-toplevel --path-format=absolute --git-common-dir && git branch --show-current'], { cwd, on: s.machine ?? undefined }).catch(() => null);
         if (r?.code !== 0) continue;
         const [top, common, branch] = r.stdout.split("\n");
         if (common !== `${top}/.git`) next[s.id] = branch || "detached";
-        if (s.active) {
-          const st = await exec("sh", ["-c", "git status --porcelain"], { cwd, on: s.machine ?? undefined }).catch(() => null);
-          const lines = st?.code === 0 ? st.stdout.split("\n").filter(Boolean) : [];
-          git = { branch: branch || "detached", added: lines.filter((l) => l.startsWith("??") || l[0] === "A").length,
-            changed: lines.filter((l) => !(l.startsWith("??") || l[0] === "A")).length };
-        }
       }
-      if (JSON.stringify([next, git]) !== JSON.stringify([this.worktrees, this.git])) { this.worktrees = next; this.git = git; cx.notify(); }
+      if (JSON.stringify(next) !== JSON.stringify(this.worktrees)) { this.worktrees = next; cx.notify(); }
     });
   }
 
@@ -85,54 +81,66 @@ export default class Tabs extends View {
     localStorage.setItem("panels", JSON.stringify(this.panels));
   }
 
-  // Spaces as nvim's bufferline: one cell per space, the shown one on the editor ground with an
-  // accent bar on its left. Nothing to click: H/L in NORMAL (modes mod) or alt-1..9 switch.
+  // Two rows, one hierarchy. Top: every buffer by number and name (nvim's bufferline); the shown
+  // one is a grey tab that runs down into the row below. Below (a second copy, props {role:"tabs"}):
+  // the shown buffer's tabs on that same grey shelf, the shown tab underlined; that row shows only
+  // when the buffer has more than one tab (else the buffer is a plain grey pill). Nothing to click:
+  // H/L or alt-1..9 switch buffers, rename a tab with <leader>tr.
   render() {
-    const t = theme(), root = layout(), all = spaces(), font = settings().font ?? "JetBrains Mono";
+    const t = theme(), all = spaces(), font = settings().font ?? "JetBrains Mono";
+    if (this.role === "tabs") return this.renderTabs(t, all, font);
+    const root = layout();
     // <leader>bb (leader mod) goes back to the space shown before this one.
     const now = all.find(p => p.active)?.id;
     if (now && this.lastActive && now !== this.lastActive) setShared("leader.prevSpace", this.lastActive);
     this.lastActive = now;
     this.syncPanel(all.find(p => p.active), find(root, "panel"), find(root, "panel-body"), shared("workspace.panels") ?? ["files", "changes"]);
-    const mark = (s) => s === "working" ? div().text_color(t.working).child("●")
-      : s === "blocked" ? div().text_color(t.blocked).child("!")
-      : s === "done" ? div().text_color(t.done).child("●") : null;
-    const cell = (p) => h_flex().h_full().flex_none().items_center().gap(6).pr(14)
-      .bg(p.active ? t.background : t.chrome).border_r(1).border_color(t.border)
-      .child(div().w(10).text_color(p.active ? t.accent : t.chrome).child("▎"))
+    const ps = panes(), shown = all.find((p) => p.active);
+    const many = tabsShown(shown).length > 1, row = find(root, "tab-row");
+    // A row never hidden has no `hidden` yet, so read it as a boolean.
+    const rowShown = row && !row.hidden;
+    if (row && rowShown !== many && this.rowWant !== many) { this.rowWant = many; run(many ? "layout.show" : "layout.hide", { id: "tab-row" }); }
+    if (row && rowShown === many) this.rowWant = undefined;
+    const joined = (p) => p.active && many;
+    const buf = (p) => h_flex().h(joined(p) ? 30 : 26).mb(joined(p) ? 0 : 4).flex_none().items_center().gap(7).px(12)
+      .when(p.active, el => el.bg(SHELF(t)).rounded(7)).when(joined(p), el => el.rounded_b(0))
       .child(div().text_color(t.dim).child(`${p.index}`))
-      .child(div().max_w(200).truncate().text_color(p.active ? t.foreground : t.muted).when(p.active, el => el.font_bold()).child(p.name))
-      .when(Boolean(this.worktrees[p.id]), el => el.child(div().max_w(160).truncate().text_color(t.ansi5).child(`:${this.worktrees[p.id]}`)))
-      .when(mark(p.status) != null, el => el.child(mark(p.status)));
-    // The shown buffer's tabs follow it as pills, so you see whose they are. Rename: <leader>tr.
-    const tab = (c) => h_flex().h(24).flex_none().items_center().gap(5).px(10).rounded(12).text_size(12)
-      .bg(c.active ? t.accent : t.chrome).border(1).border_color(c.active ? t.accent : t.border)
-      .child(div().text_color(c.active ? t.accent_foreground : t.dim).child(`${c.index}`))
-      .child(div().max_w(200).truncate().text_color(c.active ? t.accent_foreground : t.muted).when(c.active, el => el.font_bold()).child(c.named ? c.name : "tab"))
-      .when(mark(c.status) != null, el => el.child(c.active ? div().text_color(t.accent_foreground).child(c.status === "blocked" ? "!" : "●") : mark(c.status)));
-    const tabStrip = (p) => h_flex().h_full().flex_none().items_center().gap(6).pl(4).pr(12)
-      .bg(t.background).border_r(1).border_color(t.border)
-      .children((p.tabs ?? []).filter((c) => !c.settled || c.active).map(tab));
-    // Right: where the shown buffer is, its git state, and agents across all buffers (statusline style).
-    const shown = all.find((p) => p.active), g = this.git, ps = panes();
+      .child(div().max_w(220).truncate().text_color(p.active ? t.foreground : t.muted).when(p.active, el => el.font_bold()).child(p.name))
+      .when(Boolean(this.worktrees[p.id]), el => el.child(div().max_w(160).truncate().text_color(t.dim).child(`:${this.worktrees[p.id]}`)))
+      .when(mark(t, p.status) != null, el => el.child(mark(t, p.status)));
+    // Right: agents across all buffers, by status.
     const count = (st) => ps.filter((x) => x.status === st).length;
-    const home = (f) => (f ?? "").replace(/^\/home\/[^/]+/, "~");
-    const folder = home(ps.find((x) => x.focused)?.cwd ?? shown?.folder);
     const seg = (color, text) => div().flex_none().text_color(color).child(text);
-    const info = h_flex().flex_none().items_center().gap(14).px(14).text_size(12)
-      .when(Boolean(folder), el => el.child(div().max_w(320).truncate().text_color(t.muted).child(folder)))
-      .when(Boolean(g), el => el.child(h_flex().gap(6)
-        .child(seg(t.ansi5, g.branch))
-        .when(g.added > 0, e => e.child(seg(t.ansi2, `+${g.added}`)))
-        .when(g.changed > 0, e => e.child(seg(t.ansi3, `~${g.changed}`)))))
-      .when(count("working") + count("blocked") + count("done") > 0, el => el.child(h_flex().gap(8)
-        .when(count("working") > 0, e => e.child(seg(t.working, `● ${count("working")}`)))
-        .when(count("blocked") > 0, e => e.child(seg(t.blocked, `! ${count("blocked")}`)))
-        .when(count("done") > 0, e => e.child(seg(t.done, `✓ ${count("done")}`)))));
-    return h_flex().size_full().min_w(0).items_center().bg(t.chrome).border_b(1).border_color(t.border)
-      .font_family(font).text_size(13)
-      .child(h_flex().h_full().flex_1().min_w(0).overflow_x_hidden()
-        .children(all.flatMap((p) => p.active ? [cell(p), tabStrip(p)] : [cell(p)])))
+    const info = h_flex().h_full().flex_none().items_center().gap(14).px(12).text_size(11)
+      .children(["working", "blocked", "done"].filter((s) => count(s) > 0).map((s) => seg(hue(t, s), `${GLYPH[s]} ${count(s)}`)));
+    return h_flex().size_full().min_w(0).items_end().bg(t.chrome).font_family(font).text_size(13)
+      .child(h_flex().flex_1().min_w(0).overflow_x_hidden().items_end().gap(2).pl(8).children(all.map(buf)))
       .child(info);
   }
+
+  renderTabs(t, all, font) {
+    const ps = panes(), shown = all.find((p) => p.active);
+    // An unnamed tab is called after what runs in it (claude, zsh), not "tab".
+    const label = (c) => { if (c.named) return c.name; const x = ps.find((x) => x.tab === c.id && x.focused) ?? ps.find((x) => x.tab === c.id); return x?.app ?? x?.mod ?? "shell"; };
+    const tab = (c) => h_flex().h_full().flex_none().items_center().gap(5).px(10)
+      .border_b(2).border_color(c.active ? t.foreground : SHELF(t))
+      .child(div().text_color(t.dim).child(`${c.index}`))
+      .child(div().max_w(180).truncate().text_color(c.active ? t.foreground : t.muted).child(label(c)))
+      .when(mark(t, c.status) != null, el => el.child(mark(t, c.status)));
+    const tabs = tabsShown(shown);
+    // The shelf's top-left corner stays square when the first buffer's tab runs into it.
+    // A small gap under it keeps it apart from the pane cards.
+    return div().size_full().pb(6).bg(t.chrome).child(h_flex().size_full().min_w(0).px(4).bg(SHELF(t)).rounded(7)
+      .when(shown?.index === 1, el => el.rounded_tl(0))
+      .font_family(font).text_size(12).overflow_x_hidden().children(tabs.map(tab)));
+  }
 }
+
+// A buffer's tabs as lists show them: settled ones fold away unless shown.
+const tabsShown = (p) => (p?.tabs ?? []).filter((c) => !c.settled || c.active);
+// The shown buffer and its tabs share this shade: one step darker than the bar.
+const SHELF = (t) => t.border;
+// Colors mean agent status only, the same everywhere: working / blocked / done take the theme's tokens.
+const GLYPH = { working: "●", blocked: "!", done: "✓" };
+const hue = (t, s) => s === "working" ? t.working : s === "blocked" ? t.blocked : s === "done" ? t.done : null;
+const mark = (t, s) => hue(t, s) ? div().flex_none().text_color(hue(t, s)).child(GLYPH[s]) : null;
