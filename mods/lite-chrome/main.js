@@ -58,16 +58,7 @@ export default class WorkspaceChrome extends View {
           .role("button").accessibility_label(`Restart into Herdr ${ready}`)
           .on_click(() => run("app.update")).child("Update"), 16))))));
     }
-    // Room for the macOS window buttons (layout traffic_lights), a place to drag the window, and the
-    // sidebar toggle at its left edge (the sidebar is on the right, so the toggle sits by the work area); while the sidebar is hidden, t3-tabs shows it after the buttons.
-    // lite: T3's brand bar without Home and the Lists/Inbox switch; only the sidebar toggle.
-    return focusRoot(this, h_flex().id("brand").size_full().bg(t.chrome).pl(8).items_center().justify_start()
-      .child(tip(this, t, "sidebar-toggle", "Hide sidebar", stop(this, t, "sidebar-toggle", div().id("sidebar-toggle").size(28).flex_none().flex().items_center().justify_center().rounded(8)
-        .text_color(lit("sidebar-toggle")).hover(s => s.bg(t.hover)).on_hover(glow(this, "sidebar-toggle"))
-        .role("button").accessibility_label("Hide sidebar")
-        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        // It goes with the sidebar, before the pointer can report leaving it.
-        .on_click(() => { this.hot = null; run("layout.toggle", { id: "sidebar" }); })
-        .child(svg("mods/lite-chrome/icons/panel-right.svg").size(14)), 8), { action: "layout.toggle:sidebar", below: true })));
+    // lite: the brand bar is a bare drag strip, nothing to click (ctrl-shift-b still toggles the sidebar).
+    return div().id("brand").size_full().bg(t.chrome);
   }
 }

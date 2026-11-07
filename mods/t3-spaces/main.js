@@ -9,7 +9,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, props, layout, nextCommand } from "herdr";
 import { projectMark, placeOf, tint } from "./project.js";
 import { dragGone, glow, tip, tipMark, POINTER_WATCH, pointerMoved } from "./tip.js";
-import { stopsInit, stopsEnd, stop, focusRoot, enter, pressed, justClosed } from "./focus.js";
+import { stopsInit, stopsEnd, stop, focusRoot, enter, pressed } from "./focus.js";
 
 // Where a space is now. `ps`: panes(), read once by the caller (each read copies every pane).
 const where = (s, ps) => JSON.stringify([s.machine ?? null, placeOf(s, ps)]);
@@ -670,24 +670,10 @@ export default class Spaces extends View {
     planMotion(this, shown, cx, { freeze: d?.moved && !d.drawn, from: this.landed });
     if (d?.moved) d.drawn = true;
     this.landed = null;
-    const asks = props()?.newMenu && machines().length > 1;
-    const tool = (id, label, icon, fn, more) => tip(this, t, id, label, stop(this, t, id, div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(8).text_color(this.hot === id ? t.foreground : t.dim).on_hover(glow(this, id)).on_mouse_down("left", () => pressed(this)).role("button").accessibility_label(label).hover(s => s.bg(t.hover))
-      .on_click(fn).child(svg(`mods/t3-spaces/icons/${icon}.svg`).size(16)), 8), more);
     return focusRoot(this, v_flex().size_full().min_h(0).bg(t.chrome).text_size(14)
       // As tall as Inbox's top row, T3's.
       .child(h_flex().id("spaces-heading").h(48).flex_none().pl(18).pr(8).items_center().justify_between().text_size(12).font_medium().text_color(t.dim)
-        .child(div().text_color(t.muted).child("Spaces"))
-        // The same two as Inbox's top row, so switching modes moves nothing.
-        .child(h_flex().flex_none().items_center()
-          .child(tool("space-new", "New space", "folder-plus", (_e, cx) => {
-            this.hot = null;
-            // The layout's menu asks which machine, as its mod.json places it; the shipped one can't, so docked alone it's the active space's.
-            const closing = justClosed(this, `${props()?.newMenu}.pickClosed`);
-            if (!asks) run("space.new");
-            else if (!closing) openOverlay({ mod: props().newMenu, kind: "popup", frame: "none", at: "top", offset: 96, width: 576, height: 420, props: { pick: true } });
-            cx.notify();
-          }, { action: asks ? null : "space.new" }))
-          .child(tool("space-new-tab", "New tab", "square-pen", (_e, cx) => { this.hot = null; const menu = props()?.newMenu ?? "new-menu"; if (!justClosed(this, `${menu}.closed`)) run("mod.open", { name: menu }); cx.notify(); }))))
+        .child(div().text_color(t.muted).child("Spaces")))
       .child(v_flex().id("space-list").flex_1().min_h(0).overflow_y_scroll()
         .on_mouse_move((e, cx) => this.dragTo(e, cx))
         // Released anywhere in the list, it lands where the gap is.
