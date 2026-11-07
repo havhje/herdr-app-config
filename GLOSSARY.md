@@ -110,6 +110,26 @@ _Avoid_: which-key (the nvim plugin it imitates), popup, palette
 A set of related leader keys under one letter, such as +buffer, +agents, +git, +ui.
 _Avoid_: submenu, category
 
+**Needs-me queue**:
+The agents that are blocked or done, blocked first and longest-waiting first; `<leader>å` / `<leader>Å` step through it.
+_Avoid_: inbox, attention list
+
+**Jumplist**:
+The tabs you landed on, in order, with the pane you were last on in each; `<leader>o` goes back, `<leader>i` forward, as nvim's ctrl-o / ctrl-i.
+_Avoid_: history, back stack
+
+**Agent finder**:
+The dialog that lists every agent to filter and go to, with when it needed me or finished and the selected agent's screen beside it; `<leader><space>`.
+_Avoid_: picker (Herdr's tab picker), switcher
+
+**Status log**:
+Every time an agent needed me or finished, with the time; `tab` in the agent finder shows it.
+_Avoid_: notifications, history
+
+**Zen mode**:
+Only the shown pane: sidebar, bufferline, tab row and side panel hidden and the pane zoomed; `<leader>uz` toggles it.
+_Avoid_: focus mode, fullscreen
+
 **Command palette**:
 Herdr's searchable list of every app command.
 _Avoid_: leader menu, launcher

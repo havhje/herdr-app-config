@@ -186,7 +186,7 @@
               "type": "block",
               "hidden": true,
               "size": {
-                "px": 330
+                "px": 450
               },
               "content": {
                 "mod": "leader"

@@ -1,6 +1,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, spaces, panes, run, theme, shared, setShared, layout, settings, nextCommand, focused, exec } from "herdr";
+import { recordJump, recordStatus } from "./record.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -34,6 +35,8 @@ export default class Tabs extends View {
     this.worktrees = {};
     this.checkWorktrees(cx);
     cx.timer.every(5000, (cx) => this.checkWorktrees(cx));
+    // Zen hides this bar; a hidden copy may not redraw, but its timers run: keep recording then too.
+    cx.timer.every(1000, () => { if (shared("zen")) { recordJump(); recordStatus(); } });
   }
 
   // A space is a worktree when its git dir isn't its top's own .git (as t3-menu's checkout()).
@@ -94,12 +97,17 @@ export default class Tabs extends View {
     const now = all.find(p => p.active)?.id;
     if (now && this.lastActive && now !== this.lastActive) setShared("leader.prevSpace", this.lastActive);
     this.lastActive = now;
-    this.syncPanel(all.find(p => p.active), find(root, "panel"), find(root, "panel-body"), shared("workspace.panels") ?? ["files"]);
+    // The leader's jumplist (<leader>o/i) and status log (<leader>un) are kept from here (record.js).
+    recordJump();
+    recordStatus();
+    // Zen (<leader>uz) hides the tab row and side panel: leave them, and don't record its closed panel as a choice.
+    const zen = Boolean(shared("zen"));
+    if (!zen) this.syncPanel(all.find(p => p.active), find(root, "panel"), find(root, "panel-body"), shared("workspace.panels") ?? ["files"]);
     const ps = panes(), shown = all.find((p) => p.active);
     const many = tabsShown(shown).length > 1, row = find(root, "tab-row");
     // A row never hidden has no `hidden` yet, so read it as a boolean.
     const rowShown = row && !row.hidden;
-    if (row && rowShown !== many && this.rowWant !== many) { this.rowWant = many; run(many ? "layout.show" : "layout.hide", { id: "tab-row" }); }
+    if (row && !zen && rowShown !== many && this.rowWant !== many) { this.rowWant = many; run(many ? "layout.show" : "layout.hide", { id: "tab-row" }); }
     if (row && rowShown === many) this.rowWant = undefined;
     const joined = (p) => p.active && many;
     const buf = (p) => h_flex().h(joined(p) ? 30 : 26).mb(joined(p) ? 0 : 4).flex_none().items_center().gap(7).px(12)

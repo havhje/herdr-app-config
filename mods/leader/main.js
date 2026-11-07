@@ -3,6 +3,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, spaces, panes, layout, shared, setShared, settings, focused, nextCommand, openOverlay } from "herdr";
+import { nextNeed, jumpBy, zen, killAgent } from "./jump.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -23,7 +24,15 @@ const active = () => spaces().find((s) => s.active);
 const worktree = (action) => () => openOverlay({ mod: "worktree", kind: "dialog", ...(action === "open" ? { width: 560, height: 480 } : { width: 460, height: 280 }),
   props: { space: active()?.id, folder: panes().find((p) => p.focused)?.cwd, action } });
 
+// The agent finder (mods/agent-pick); tab in it shows the status log.
+const pick = (mode) => openOverlay({ mod: "agent-pick", kind: "dialog", width: 0.8, height: 0.75, props: { mode } });
+
 const TREE = {
+  " ": ["Find agent", () => pick("agents")],
+  "å": ["Next agent that needs me", (open) => nextNeed(1, open)],
+  "Å": ["Prev agent that needs me", (open) => nextNeed(-1, open)],
+  o: ["Jump back", () => jumpBy(-1)],
+  i: ["Jump forward", () => jumpBy(1)],
   b: { label: "+buffer", keys: {
     n: ["Next buffer", cmd("space.next")],
     p: ["Prev buffer", cmd("space.prev")],
@@ -72,12 +81,14 @@ const TREE = {
     n: ["Next agent", cmd("agent.next")],
     N: ["Prev agent", cmd("agent.prev")],
     f: ["Focus agents list", cmd("t3-agents.focus")],
+    d: ["Kill agent (asks first)", (open) => killAgent(open)],
   } },
   u: { label: "+ui", keys: {
     s: ["Settings", cmd("app.settings")],
     m: ["Add machine", cmd("mod.open", { name: "machine-add" })],
     l: ["Next layout", cmd("layout.switch")],
     t: ["Theme", cmd("app.settings", { section: "look" })],
+    z: ["Zen mode toggle", (open) => zen(open)],
   } },
   f: ["Find in terminal", cmd("terminal.search")],
   ":": ["Command palette", cmd("app.palette")],
@@ -109,7 +120,7 @@ export default class Leader extends View {
     cx.stop_propagation();
     if (e.key === "escape") return this.close();
     if (e.key === "backspace") { if (this.path.length) { this.path.pop(); cx.notify(); } else this.close(); return; }
-    const k = e.key_char ?? e.key;
+    const k = e.key === "space" ? " " : (e.key_char ?? e.key);
     const entry = this.level().keys[k];
     if (!entry) return;
     if (!Array.isArray(entry)) { this.path.push(k); cx.notify(); return; }
@@ -130,7 +141,7 @@ export default class Leader extends View {
     const row = ([k, v]) => {
       const group = !Array.isArray(v);
       return h_flex().h(22).gap(10).items_center()
-        .child(div().w(28).text_color(t.accent).font_bold().child(k === "1" && !this.path.length ? "1-9" : k))
+        .child(div().w(28).text_color(t.accent).font_bold().child(k === "1" && !this.path.length ? "1-9" : k === " " ? "spc" : k))
         .child(div().text_color(t.dim).child("→"))
         .child(div().flex_1().min_w(0).truncate().text_color(group ? t.ansi5 : t.foreground).child(group ? v.label : (k === "1" && !this.path.length ? "Buffer N" : v[0])));
     };
