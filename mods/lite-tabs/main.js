@@ -107,7 +107,8 @@ export default class Tabs extends View {
       .child(div().text_color(t.dim).child(`${p.index}`))
       .child(div().max_w(220).truncate().text_color(p.active ? t.foreground : t.muted).when(p.active, el => el.font_bold()).child(p.name))
       .when(Boolean(this.worktrees[p.id]), el => el.child(div().max_w(160).truncate().text_color(t.dim).child(`:${this.worktrees[p.id]}`)))
-      .when(mark(t, p.status) != null, el => el.child(mark(t, p.status)));
+      // The shown buffer's status shows on its tabs when their row is up, so not twice.
+      .when(mark(t, p.status) != null && !joined(p), el => el.child(mark(t, p.status)));
     // Right: agents across all buffers, by status.
     const count = (st) => ps.filter((x) => x.status === st).length;
     const seg = (color, text) => div().flex_none().text_color(color).child(text);
