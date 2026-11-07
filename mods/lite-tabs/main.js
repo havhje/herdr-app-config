@@ -97,8 +97,18 @@ export default class Tabs extends View {
       .child(div().max_w(200).truncate().text_color(p.active ? t.foreground : t.muted).when(p.active, el => el.font_bold()).child(p.name))
       .when(Boolean(this.worktrees[p.id]), el => el.child(div().max_w(160).truncate().text_color(t.ansi5).child(`:${this.worktrees[p.id]}`)))
       .when(mark(p.status) != null, el => el.child(mark(p.status)));
+    // The shown buffer's tabs fill the right side as pills, so they don't read as buffers:
+    // the shown one filled with the accent, the others outlined. Rename: <leader>tr.
+    const tab = (c) => h_flex().h(24).flex_none().items_center().gap(5).px(10).rounded(12).text_size(12)
+      .bg(c.active ? t.accent : t.chrome).border(1).border_color(c.active ? t.accent : t.border)
+      .child(div().text_color(c.active ? t.accent_foreground : t.dim).child(`${c.index}`))
+      .child(div().max_w(200).truncate().text_color(c.active ? t.accent_foreground : t.muted).when(c.active, el => el.font_bold()).child(c.named ? c.name : "tab"))
+      .when(mark(c.status) != null, el => el.child(c.active ? div().text_color(t.accent_foreground).child(c.status === "blocked" ? "!" : "●") : mark(c.status)));
+    const shown = all.find((p) => p.active), tabs = (shown?.tabs ?? []).filter((c) => !c.settled || c.active);
     return h_flex().size_full().min_w(0).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .font_family(font).text_size(13).overflow_x_hidden()
-      .children(all.map(cell));
+      .child(h_flex().h_full().flex_1().min_w(0).overflow_x_hidden().children(all.map(cell)))
+      .child(div().flex_none().pr(8).pl(14).text_size(12).font_bold().text_color(t.ansi5).child("Tabs:"))
+      .child(h_flex().h_full().flex_none().items_center().gap(6).pr(10).children(tabs.map(tab)));
   }
 }
