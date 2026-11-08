@@ -95,6 +95,22 @@ const TREE = {
   ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), [`Buffer ${n}`, cmd("space.select", { index: n })]])),
 };
 
+// The order nvim's which-key shows keys in (its default sort: group, alphanum, mod, then natural, case), so a key sits
+// where it would in nvim. Space counts as which-key's "<Space>". Unlike Lua's ASCII-only lower(), å/Å lower-case
+// too, so å (next) comes before Å (prev), as a before A.
+const wkKey = (k) => (k === " " ? "<Space>" : k);
+const SORTERS = [
+  ([, v]) => (Array.isArray(v) ? 0 : 1),
+  ([k]) => (/^[A-Za-z0-9]+$/.test(wkKey(k)) ? 0 : 1),
+  ([k]) => (/^<.*>$/.test(wkKey(k)) ? 0 : 1),
+  ([k]) => wkKey(k).replace(/\d+/g, (d) => d.padStart(9, "0")).toLowerCase(),
+  ([k]) => (wkKey(k).toLowerCase() === wkKey(k) ? 0 : 1),
+];
+const byWhichKey = (a, b) => {
+  for (const f of SORTERS) { const x = f(a), y = f(b); if (x !== y) return x < y ? -1 : 1; }
+  return 0;
+};
+
 export default class Leader extends View {
   init(_props, cx) {
     this.h = cx.focus_handle();
@@ -140,11 +156,11 @@ export default class Leader extends View {
 
   render(cx) {
     const t = theme(), font = settings().font ?? "JetBrains Mono";
-    const entries = Object.entries(this.level().keys).filter(([k]) => this.path.length || !/^[2-9]$/.test(k));
+    const entries = Object.entries(this.level().keys).filter(([k]) => this.path.length || !/^[2-9]$/.test(k)).sort(byWhichKey);
     const row = ([k, v]) => {
       const group = !Array.isArray(v);
       return h_flex().h(22).gap(10).items_center()
-        .child(div().w(28).text_color(t.accent).font_bold().child(k === "1" && !this.path.length ? "1-9" : k === " " ? "spc" : k))
+        .child(div().w(28).text_color(t.accent).font_bold().child(k === "1" && !this.path.length ? "1-9" : k === " " ? "SPC" : k))
         .child(div().text_color(t.dim).child("→"))
         .child(div().flex_1().min_w(0).truncate().text_color(group ? t.ansi5 : t.foreground).child(group ? v.label : (k === "1" && !this.path.length ? "Buffer N" : v[0])));
     };
