@@ -33,8 +33,8 @@ const shown = (h) => {
     "u +ui",
     "w +panes",
     "TAB +tabs",
-    "å +next",
-    "Å +prev",
+    "æ +next",
+    "ø +prev",
   ]);
   ok("top level: every key, <space> as SPC, in which-key's order");
 
@@ -49,9 +49,9 @@ const shown = (h) => {
   ok("a group: sorted the same way");
 
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
-  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "Å", key_char: "Å" }, h.cx);
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "ø", key_char: "ø" }, h.cx);
   assert.deepEqual(shown(h), ["a Agent that needs me", "b Buffer", "t Tab"]);
-  ok("Å +prev: like nvim's [ (å +next the same)");
+  ok("ø +prev: like nvim's [ (æ +next the same)");
 
   // LazyVim's <leader><tab>: tab is "tab" (Herdr's key name), shown as TAB.
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);

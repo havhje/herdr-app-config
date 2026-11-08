@@ -29,18 +29,18 @@ const pick = (mode) => openOverlay({ mod: "agent-finder", kind: "dialog", width:
 
 const otherBuffer = () => { const id = shared("leader.otherBuffer"); if (id && spaces().some((s) => s.id === id)) run("space.select", { id }); };
 
-// Like nvim: next/prev live only under å/Å (its ]/[); the leader groups hold actions.
+// Like nvim: next/prev live only under æ/ø (its ]/[; where they sit on the Norwegian keyboard); the leader groups hold actions.
 const TREE = {
   " ": ["Find agent", () => pick("agents")],
   "?": ["Key help", cmd("app.help")],
   o: ["Jump back", () => jumpBy(-1)],
   i: ["Jump forward", () => jumpBy(1)],
-  "å": { label: "+next", keys: {
+  "æ": { label: "+next", keys: {
     a: ["Agent that needs me", (open) => nextNeed(1, open)],
     b: ["Buffer", cmd("space.next")],
     t: ["Tab", cmd("tab.next")],
   } },
-  "Å": { label: "+prev", keys: {
+  "ø": { label: "+prev", keys: {
     a: ["Agent that needs me", (open) => nextNeed(-1, open)],
     b: ["Buffer", cmd("space.prev")],
     t: ["Tab", cmd("tab.prev")],
@@ -102,8 +102,7 @@ const TREE = {
 };
 
 // The order nvim's which-key shows keys in (its default sort: group, alphanum, mod, then natural, case), so a key sits
-// where it would in nvim. Space and tab count as which-key's "<Space>" and "<Tab>". Unlike Lua's ASCII-only lower(), å/Å lower-case
-// too, so å (next) comes before Å (prev), as a before A.
+// where it would in nvim. Space and tab count as which-key's "<Space>" and "<Tab>". æ (next) comes before ø (prev).
 const wkKey = (k) => (k === " " ? "<Space>" : k === "tab" ? "<Tab>" : k);
 const SORTERS = [
   ([, v]) => (Array.isArray(v) ? 0 : 1),
