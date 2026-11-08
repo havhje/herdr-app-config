@@ -86,7 +86,6 @@ const TREE = {
       const a = focused()?.agent, pins = shared("agents.pins") ?? [];
       if (a) setShared("agents.pins", pins.includes(a) ? pins.filter((p) => p !== a) : [...pins, a]);
     }],
-    f: ["Focus agents list", cmd("agents-list.focus")],
     d: ["Kill agent (asks first)", (open) => killAgent(open)],
   } },
   u: { label: "+ui", keys: {
