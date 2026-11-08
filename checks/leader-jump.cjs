@@ -1,16 +1,16 @@
 // The leader's moves, through its keys (leader/main.js TREE): <leader>o / <leader>i walk the jumplist, <leader>å / <leader>Å
-// walk the agents that need me. The bufferline (lite-tabs) keeps both records the leader reads: shared "jumps" and
+// walk the agents that need me. The bufferline (mods/bufferline) keeps both records the leader reads: shared "jumps" and
 // shared "agents.log". Pinned before these move, so the move shows up as a change here.
 const assert = require("node:assert/strict");
 const { fakeHerdr, noSpawnErrors, MODS, find, fire, plain } = require("./fake-herdr.cjs");
 
 const ok = (name) => console.log(`  ok  ${name}`);
 
-// ctrl-space (keys.json lite-tabs:leader), then one key in the leader, as a person would.
+// ctrl-space (keys.json bufferline.leader), then one key in the leader, as a person would.
 async function leaderKey(h, key) {
   h.command(MODS.bufferline, "leader");
   await h.settle();
-  h.flushTimers(); // the bufferline hands the leader the keyboard 60ms later (run "leader.focus")
+  h.flushTimers(); // the bufferline tells the leader to open 60ms later (run "leader.open")
   await h.settle();
   h.takeCalls();
   fire(find(h.leader.render(), "leader"), "on_key_down", { key, key_char: key }, h.cx);
@@ -94,7 +94,7 @@ function start(build) {
     h.addSpace({ id: "s2", name: "beta", tabs: [{ id: "b3", changed_at: 100 }, { id: "b4", changed_at: 50 }, { id: "b5" }] });
     h.addPane({ pane: "p1", tab: "b1", terminal: "t1", status: "blocked" });
     h.addPane({ pane: "p2", tab: "b2", terminal: "t2", status: "done" });
-    h.addPane({ pane: "p3", tab: "b3", terminal: "t3", status: "blocked" });
+    h.addPane({ pane: "p3", tab: "b3", terminal: "t5", status: "blocked" });
     h.addPane({ pane: "p4", tab: "b4", terminal: "t4", status: "working" });
     h.addPane({ pane: "p5", tab: "b5" });
   });
@@ -102,7 +102,7 @@ function start(build) {
 
   {
     const calls = await leaderKey(q, "å");
-    assert.deepEqual(plain(calls).slice(-2), [["agent.focus", { terminal: "t3" }], ["pane.focus", { terminal: "t3" }]]);
+    assert.deepEqual(plain(calls).slice(-2), [["agent.focus", { terminal: "t5" }], ["pane.focus", { terminal: "t5" }]]);
     ok("<leader>å from outside the queue: the longest-blocked agent first (focus agent, then its pane)");
   }
   await leaderKey(q, "å");

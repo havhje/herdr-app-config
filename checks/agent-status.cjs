@@ -1,5 +1,5 @@
-// Agent status as the three places show it: the bufferline (lite-tabs), the pane header (t3-pane) and the agents
-// list (t3-agents). All three read it one way (lib/agent-status.js): an agent with its sub-agents (a stuck
+// Agent status as the three places show it: the bufferline, the pane header and the agents
+// list (mods/bufferline, pane-header, agents-list). All three read it one way (lib/agent-status.js): an agent with its sub-agents (a stuck
 // sub-agent, or one in error, makes it "!"; a working one under an idle agent makes it working), and a done or idle
 // agent put away (settled) or snoozed reads idle; a terminal in error reads blocked. A buffer or tab shows its most
 // urgent agent's (blocked > done > working > idle), or Herdr's own when agents() lists none of its agents.

@@ -12,7 +12,7 @@ function find(node, id) {
   return null;
 }
 
-// As t3-agents' zoom.js: a zoomed tab draws its zoomed pane whatever is focused, so unzoom onto the target first.
+// As agents-list' zoom.js: a zoomed tab draws its zoomed pane whatever is focused, so unzoom onto the target first.
 function zoomTo(found) {
   const ps = panes(), p = ps.find(found);
   if (p && !p.zoomed && ps.some((q) => q.tab === p.tab && q.zoomed)) run("pane.zoom", { pane: p.pane });
@@ -61,7 +61,7 @@ export function jumpBy(d) {
 }
 
 // Zen: the shown pane alone. Remembers what it hid (and whether it zoomed) to put back the second time.
-// lite-tabs leaves the tab row and side panel alone while shared "zen" is set.
+// bufferline leaves the tab row and side panel alone while shared "zen" is set.
 const ZEN_HIDE = ["sidebar", "tabs-row", "tab-row", "panel"];
 export function zen(open) {
   const z = shared("zen");

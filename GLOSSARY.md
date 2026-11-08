@@ -57,7 +57,7 @@ _Avoid_: favourite, starred
 ## What makes up the screen
 
 **Layout**:
-One whole arrangement and look of the app window; mine is *t3-lite*.
+One whole arrangement and look of the app window; mine is *herdr_vim*.
 _Avoid_: theme, view, screen
 
 **Mod**:
@@ -79,6 +79,22 @@ _Avoid_: tab bar, spaces list
 **Sidebar**:
 The right-hand column holding the agents list and, when open, the leader menu.
 _Avoid_: drawer, rail
+
+**Agents list**:
+Every agent in the sidebar, grouped by buffer or by status, pinned agents first.
+_Avoid_: inbox, agents panel
+
+**Sidebar footer**:
+The strip at the bottom of the sidebar; it shows a restart button once an app update is downloaded.
+_Avoid_: status bar
+
+**Pane header**:
+The line on top of each pane: what it runs, its title, folder and agent status.
+_Avoid_: title bar
+
+**Context menu**:
+The right-click menu on a pane, tab or buffer, with Herdr's own items.
+_Avoid_: terminal menu
 
 **Side panel**:
 The left-hand column showing the explorer, open or closed per buffer.

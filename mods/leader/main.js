@@ -24,8 +24,8 @@ const active = () => spaces().find((s) => s.active);
 const worktree = (action) => () => openOverlay({ mod: "worktree", kind: "dialog", ...(action === "open" ? { width: 560, height: 480 } : { width: 460, height: 280 }),
   props: { space: active()?.id, folder: panes().find((p) => p.focused)?.cwd, action } });
 
-// The agent finder (mods/agent-pick); tab in it shows the status log.
-const pick = (mode) => openOverlay({ mod: "agent-pick", kind: "dialog", width: 0.8, height: 0.75, props: { mode } });
+// The agent finder (mods/agent-finder); tab in it shows the status log.
+const pick = (mode) => openOverlay({ mod: "agent-finder", kind: "dialog", width: 0.8, height: 0.75, props: { mode } });
 
 const TREE = {
   " ": ["Find agent", () => pick("agents")],
@@ -69,18 +69,18 @@ const TREE = {
   a: { label: "+agents", keys: {
     // Shown: hide the sidebar. Hidden (the leader showed it just for itself): keep it and give the list the keyboard.
     a: ["Toggle agents", (open) => {
-      if (open?.sidebarHidden) run("t3-agents.focus");
+      if (open?.sidebarHidden) run("agents-list.focus");
       else { run("layout.hide", { id: "sidebar" }); }
     }, { keepSidebar: true }],
     i: ["Toggle idle agents", () => setShared("agents.hideIdle", !shared("agents.hideIdle"))],
-    g: ["Toggle grouping (space/status)", () => setShared("agents.sort", shared("agents.sort") === "grouped" ? "priority" : "grouped")],
+    g: ["Toggle grouping (buffer/status)", () => setShared("agents.sort", shared("agents.sort") === "grouped" ? "priority" : "grouped")],
     p: ["Pin/unpin agent", () => {
       const a = focused()?.agent, pins = shared("agents.pins") ?? [];
       if (a) setShared("agents.pins", pins.includes(a) ? pins.filter((p) => p !== a) : [...pins, a]);
     }],
     n: ["Next agent", cmd("agent.next")],
     N: ["Prev agent", cmd("agent.prev")],
-    f: ["Focus agents list", cmd("t3-agents.focus")],
+    f: ["Focus agents list", cmd("agents-list.focus")],
     d: ["Kill agent (asks first)", (open) => killAgent(open)],
   } },
   u: { label: "+ui", keys: {
@@ -99,7 +99,7 @@ export default class Leader extends View {
   init(_props, cx) {
     this.h = cx.focus_handle();
     this.path = [];
-    // ctrl-space: lite-tabs shows us (and the sidebar, if hidden), then sends "open", or "openSidebar" when it had to
+    // ctrl-space: bufferline shows us (and the sidebar, if hidden), then sends "open", or "openSidebar" when it had to
     // show the sidebar. Note where we came from, take the keyboard, start at the top.
     cx.spawn(async (cx) => {
       for (;;) {

@@ -43,7 +43,7 @@ jsconfig.json
 gpui-kit.d.ts
 # Window state the app writes as you use it (panel sizes, shown/hidden rows).
 /layouts/.state/
-# Shipped layouts and themes: Herdr rewrites them on start; only t3-lite and omarchy are mine.
+# Shipped layouts and themes: Herdr rewrites them on start; only herdr_vim and omarchy are mine.
 /layouts/main.json
 /layouts/terminals.json
 /layouts/win98.json

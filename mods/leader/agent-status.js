@@ -81,7 +81,7 @@ const notNews = (k, word, kids) => stillSettled(k, word, kids) || Number(k?.labe
 //   agent(address, word?)  its word (`word` stands in for the one agents() gives, as the list's held done), null if none
 //   fromSubAgent(address)  its word is its sub-agents', not its own
 //   subAgent(terminal)     a sub-agent's own word (a terminal from terminals())
-//   tab(id), space(id)     the most urgent of their agents; with none of them in agents(), Herdr's own rollup
+//   tab(id), buffer(id)    the most urgent of their agents; with none of them in agents(), Herdr's own rollup
 //                          (agents() isn't documented to list other machines' agents: a remote buffer keeps its mark)
 export function statusReader() {
   const listed = agents(), all = terminals();
@@ -104,14 +104,14 @@ export function statusReader() {
     const here = listed.filter(pick);
     return here.length ? mostUrgent(here.map((a) => agent(a.address))) : rollup() ?? null;
   };
-  let spaceList;
-  const spaceInfo = () => (spaceList = spaceList ?? spaces());
+  let bufferList;
+  const buffers = () => (bufferList = bufferList ?? spaces());
   return {
     agent,
     fromSubAgent: (addr) => { const w = agent(addr); return w != null && w !== "idle" && w !== own(addr, words.get(addr)); },
     subAgent: (k) => subWord(k, words),
-    tab: (id) => among((a) => a.tab === id, () => spaceInfo().flatMap((s) => s.tabs ?? []).find((c) => c.id === id)?.status),
-    space: (id) => among((a) => a.space === id, () => spaceInfo().find((s) => s.id === id)?.status),
+    tab: (id) => among((a) => a.tab === id, () => buffers().flatMap((s) => s.tabs ?? []).find((c) => c.id === id)?.status),
+    buffer: (id) => among((a) => a.space === id, () => buffers().find((s) => s.id === id)?.status),
   };
 }
 
