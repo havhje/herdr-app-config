@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { props, spaces, panes, agents, run, theme, shared, layout, settings, nextCommand, exec } from "herdr";
+import { props, spaces, panes, agents, run, theme, shared, setShared, layout, settings, nextCommand, exec } from "herdr";
 import { record } from "./leader-records.js";
 import { statusReader, mark, colour, glyph } from "./agent-status.js";
 
@@ -23,7 +23,14 @@ export default class Bufferline extends View {
     // opened. It sits in the sidebar: a hidden sidebar shows for it, and the leader is told so, to hide it on close.
     cx.spawn(async (cx) => {
       for (;;) {
-        if (await nextCommand() !== "leader") continue;
+        const c = await nextCommand();
+        // <leader><tab>o, once confirmed: the leader is hidden by then, so the closing is done here.
+        if (c === "closeOtherTabs") {
+          for (const id of shared("tabs.closeOthers") ?? []) run("tab.close", { id });
+          setShared("tabs.closeOthers", null);
+          continue;
+        }
+        if (c !== "leader") continue;
         const sidebarHidden = Boolean(find(layout(), "sidebar")?.hidden);
         if (sidebarHidden) run("layout.show", { id: "sidebar" });
         run("layout.show", { id: "leader" });

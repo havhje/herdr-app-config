@@ -56,7 +56,7 @@ const shown = (h) => {
   // LazyVim's <leader><tab>: tab is "tab" (Herdr's key name), shown as TAB.
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "tab" }, h.cx);
-  assert.deepEqual(shown(h), ["d Close tab", "r Rename tab", "TAB New tab", "¨ Next tab", "å Previous tab"]);
+  assert.deepEqual(shown(h), ["d Close tab", "f First tab", "l Last tab", "o Close other tabs (asks first)", "r Rename tab", "TAB New tab", "¨ Next tab", "å Previous tab"]);
   ok("<tab> +tabs: LazyVim's tab group");
 
   // The sidebar hidden: ctrl-space shows it just for the leader. <leader>aa must keep it, or the agents list it

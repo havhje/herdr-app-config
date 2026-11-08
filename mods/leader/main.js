@@ -3,7 +3,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, spaces, panes, layout, shared, setShared, settings, focused, nextCommand, openOverlay } from "herdr";
-import { nextNeed, jumpBy, zen, killAgent } from "./jump.js";
+import { nextNeed, jumpBy, zen, killAgent, closeOtherTabs } from "./jump.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -70,6 +70,9 @@ const TREE = {
     "å": ["Previous tab", cmd("tab.prev")],
     d: ["Close tab", cmd("tab.close")],
     r: ["Rename tab", cmd("tab.rename")],
+    f: ["First tab", () => { const c = active()?.tabs?.[0]; if (c) run("tab.select", { id: c.id }); }],
+    l: ["Last tab", () => { const c = active()?.tabs?.at(-1); if (c) run("tab.select", { id: c.id }); }],
+    o: ["Close other tabs (asks first)", closeOtherTabs],
   } },
   e: ["Explorer (files)", panel("files")],
   g: { label: "+git", keys: {

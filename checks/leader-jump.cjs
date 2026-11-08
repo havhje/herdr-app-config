@@ -269,6 +269,35 @@ function start(build) {
     ok("the fake as Herdr: a hidden bufferline gets no ctrl-space (the #15 trap)");
   }
 
+  // ---- <leader><tab> f / l / o ----
+  {
+    const t = start((h) => {
+      h.addSpace({ id: "s1", name: "alpha", tabs: [{ id: "b1" }, { id: "b2" }, { id: "b3" }] });
+      h.addPane({ pane: "p1", tab: "b1" });
+      h.addPane({ pane: "p2", tab: "b2", status: "working" });
+      h.addPane({ pane: "p3", tab: "b3" });
+    });
+    t.focusPane("p2");
+    await t.settle();
+    const sel = (calls) => calls.filter(([n]) => n === "tab.select").map(([, a]) => a.id);
+    assert.deepEqual(sel(await leaderKey(t, "tab", "f")), ["b1"]);
+    assert.deepEqual(sel(await leaderKey(t, "tab", "l")), ["b3"]);
+    ok("<leader><tab>f / l: first / last tab of the shown buffer");
+
+    // o asks first (the other tabs' terminals end), and closes nothing until confirmed.
+    const asked = await leaderKey(t, "tab", "o");
+    assert.ok(!asked.some(([n]) => n === "tab.close"), `closed before asking: ${JSON.stringify(asked)}`);
+    const dlg = t.overlays.at(-1);
+    assert.equal(dlg.mod, "confirm");
+    assert.equal(dlg.props.title, "Close 2 other tabs?");
+    assert.equal(dlg.props.command.name, "bufferline.closeOtherTabs");
+    // Confirmed: the dialog runs bufferline.closeOtherTabs; the bufferline (always shown) closes the noted tabs.
+    t.command(MODS.bufferline, "closeOtherTabs");
+    await t.settle();
+    assert.deepEqual(t.takeCalls().filter(([n]) => n === "tab.close").map(([, a]) => a.id), ["b1", "b3"]);
+    ok("<leader><tab>o: asks, then closes every other tab of the shown buffer");
+  }
+
   noSpawnErrors();
   console.log("leader-jump: all passed");
 })().catch((e) => { console.error(e); process.exit(1); });

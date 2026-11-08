@@ -2,7 +2,7 @@
 // the jumplist (ctrl-o / ctrl-i over tabs you were on), zen mode and killing an agent.
 // The jumplist and the status log are kept by leader-records.js (from lib/); this file reads them and moves.
 
-import { agents, panes, run, shared, setShared, notify, openOverlay, layout } from "herdr";
+import { agents, panes, spaces, run, shared, setShared, notify, openOverlay, layout } from "herdr";
 import { needsMeQueue } from "./agent-status.js";
 import { jumpTo } from "./leader-records.js";
 
@@ -98,5 +98,19 @@ export function killAgent(open) {
     title: `Kill ${a.program?.name ?? "agent"}?`,
     detail: `${a.space_name} › tab ${a.tab_name}${a.title ? ` (${a.title})` : ""}. Ends the program; its pane closes.`,
     command: { name: "terminal.kill", args: { terminal: address } },
+  } });
+}
+
+// LazyVim's <leader><tab>o (tabonly), but a Herdr tab's terminals end when it closes, so it asks first.
+// The confirm dialog runs one command, so the bufferline (always shown) closes the tabs noted here.
+export function closeOtherTabs() {
+  const s = spaces().find((x) => x.active), others = (s?.tabs ?? []).filter((c) => !c.active);
+  if (!others.length) return say("No other tabs");
+  setShared("tabs.closeOthers", others.map((c) => c.id));
+  const busy = agents().filter((a) => others.some((c) => c.id === a.tab)).length;
+  openOverlay({ mod: "confirm", kind: "dialog", width: 420, height: 190, props: {
+    title: `Close ${others.length} other tab${others.length > 1 ? "s" : ""}?`,
+    detail: `Ends their terminals${busy ? ` and ${busy} agent${busy > 1 ? "s" : ""}` : ""}.`,
+    command: { name: "bufferline.closeOtherTabs" },
   } });
 }
