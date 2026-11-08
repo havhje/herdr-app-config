@@ -27,16 +27,26 @@ const worktree = (action) => () => openOverlay({ mod: "worktree", kind: "dialog"
 // The agent finder (mods/agent-finder); tab in it shows the status log.
 const pick = (mode) => openOverlay({ mod: "agent-finder", kind: "dialog", width: 0.8, height: 0.75, props: { mode } });
 
+const otherBuffer = () => { const id = shared("leader.otherBuffer"); if (id && spaces().some((s) => s.id === id)) run("space.select", { id }); };
+
+// Like nvim: next/prev live only under å/Å (its ]/[); the leader groups hold actions.
 const TREE = {
   " ": ["Find agent", () => pick("agents")],
-  "å": ["Next agent that needs me", (open) => nextNeed(1, open)],
-  "Å": ["Prev agent that needs me", (open) => nextNeed(-1, open)],
+  "?": ["Key help", cmd("app.help")],
   o: ["Jump back", () => jumpBy(-1)],
   i: ["Jump forward", () => jumpBy(1)],
+  "å": { label: "+next", keys: {
+    a: ["Agent that needs me", (open) => nextNeed(1, open)],
+    b: ["Buffer", cmd("space.next")],
+    t: ["Tab", cmd("tab.next")],
+  } },
+  "Å": { label: "+prev", keys: {
+    a: ["Agent that needs me", (open) => nextNeed(-1, open)],
+    b: ["Buffer", cmd("space.prev")],
+    t: ["Tab", cmd("tab.prev")],
+  } },
   b: { label: "+buffer", keys: {
-    n: ["Next buffer", cmd("space.next")],
-    p: ["Prev buffer", cmd("space.prev")],
-    b: ["Other buffer", () => { const id = shared("leader.otherBuffer"); if (id && spaces().some((s) => s.id === id)) run("space.select", { id }); }],
+    b: ["Other buffer", otherBuffer],
     d: ["Delete buffer", () => run("space.close", { id: active()?.id })],
     r: ["Rename buffer", () => run("space.rename", { id: active()?.id })],
     N: ["New buffer", cmd("space.new")],
@@ -55,8 +65,6 @@ const TREE = {
     n: ["New tab", cmd("tab.new")],
     d: ["Close tab", cmd("tab.close")],
     r: ["Rename tab", cmd("tab.rename")],
-    l: ["Next tab", cmd("tab.next")],
-    h: ["Prev tab", cmd("tab.prev")],
   } },
   e: ["Explorer (files)", panel("files")],
   g: { label: "+git", keys: {
@@ -78,8 +86,6 @@ const TREE = {
       const a = focused()?.agent, pins = shared("agents.pins") ?? [];
       if (a) setShared("agents.pins", pins.includes(a) ? pins.filter((p) => p !== a) : [...pins, a]);
     }],
-    n: ["Next agent", cmd("agent.next")],
-    N: ["Prev agent", cmd("agent.prev")],
     f: ["Focus agents list", cmd("agents-list.focus")],
     d: ["Kill agent (asks first)", (open) => killAgent(open)],
   } },
@@ -90,9 +96,23 @@ const TREE = {
     t: ["Theme", cmd("app.settings", { section: "look" })],
     z: ["Zen mode toggle", (open) => zen(open)],
   } },
-  f: ["Find in terminal", cmd("terminal.search")],
-  ":": ["Command palette", cmd("app.palette")],
   ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), [`Buffer ${n}`, cmd("space.select", { index: n })]])),
+};
+
+// The order nvim's which-key shows keys in (its default sort: group, alphanum, mod, then natural, case), so a key sits
+// where it would in nvim. Space counts as which-key's "<Space>". Unlike Lua's ASCII-only lower(), å/Å lower-case
+// too, so å (next) comes before Å (prev), as a before A.
+const wkKey = (k) => (k === " " ? "<Space>" : k);
+const SORTERS = [
+  ([, v]) => (Array.isArray(v) ? 0 : 1),
+  ([k]) => (/^[A-Za-z0-9]+$/.test(wkKey(k)) ? 0 : 1),
+  ([k]) => (/^<.*>$/.test(wkKey(k)) ? 0 : 1),
+  ([k]) => wkKey(k).replace(/\d+/g, (d) => d.padStart(9, "0")).toLowerCase(),
+  ([k]) => (wkKey(k).toLowerCase() === wkKey(k) ? 0 : 1),
+];
+const byWhichKey = (a, b) => {
+  for (const f of SORTERS) { const x = f(a), y = f(b); if (x !== y) return x < y ? -1 : 1; }
+  return 0;
 };
 
 export default class Leader extends View {
@@ -140,11 +160,11 @@ export default class Leader extends View {
 
   render(cx) {
     const t = theme(), font = settings().font ?? "JetBrains Mono";
-    const entries = Object.entries(this.level().keys).filter(([k]) => this.path.length || !/^[2-9]$/.test(k));
+    const entries = Object.entries(this.level().keys).filter(([k]) => this.path.length || !/^[2-9]$/.test(k)).sort(byWhichKey);
     const row = ([k, v]) => {
       const group = !Array.isArray(v);
       return h_flex().h(22).gap(10).items_center()
-        .child(div().w(28).text_color(t.accent).font_bold().child(k === "1" && !this.path.length ? "1-9" : k === " " ? "spc" : k))
+        .child(div().w(28).text_color(t.accent).font_bold().child(k === "1" && !this.path.length ? "1-9" : k === " " ? "SPC" : k))
         .child(div().text_color(t.dim).child("→"))
         .child(div().flex_1().min_w(0).truncate().text_color(group ? t.ansi5 : t.foreground).child(group ? v.label : (k === "1" && !this.path.length ? "Buffer N" : v[0])));
     };
