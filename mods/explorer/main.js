@@ -388,7 +388,8 @@ export default class Explorer extends View {
         if (parent) this.move(list, list.findIndex((r) => r.path === parent), cx);
       }
     } else if ((c === "P" || k === "shift-p") && row && !row.entry.dir) this.show(row.path, cx);
-    else if (k === "/") { this.indexKey = null; this.loadIndex(cx); this.prompt("filter", row, this.filter, cx); }
+    // - as well as /: my nvim searches on - (where / sits on a US keyboard).
+    else if (k === "/" || k === "-") { this.indexKey = null; this.loadIndex(cx); this.prompt("filter", row, this.filter, cx); }
     else if (k === "a") this.prompt("add", row, "", cx);
     else if (k === "r" && row) this.prompt("rename", row, row.entry.name, cx);
     else if (k === "d" && row) this.prompt("delete", row, "", cx);
