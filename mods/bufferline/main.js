@@ -36,7 +36,8 @@ export default class Bufferline extends View {
     this.worktrees = {};
     this.checkWorktrees(cx);
     cx.timer.every(5000, (cx) => this.checkWorktrees(cx));
-    // Zen hides this bar; a hidden copy may not redraw, but its timers run: keep the leader's records then too.
+    // Zen shrinks this bar to 0 px (it must stay shown for ctrl-space); it may not redraw then, but its timers run:
+    // keep the leader's records then too.
     cx.timer.every(1000, () => { if (shared("zen")) record(); });
   }
 

@@ -224,6 +224,51 @@ function start(build) {
     ok("ctrl-space with the sidebar hidden: shows it for the leader; esc hides both, keyboard back to the pane");
   }
 
+  {
+    // Zen (<leader>uz) must not trap the leader key (#15). ctrl-space goes to the bufferline in the buffer row, and
+    // `<mod>.<command>` reaches shown copies only: zen shrinks that row to 0 px instead of hiding it.
+    const z = start((h) => {
+      h.addSpace({ id: "s1", name: "alpha", tabs: [{ id: "b1" }] });
+      h.addPane({ pane: "p1", tab: "b1" });
+      h.addPane({ pane: "p2", tab: "b1" });
+    });
+    z.focusPane("p1"); land(z);
+    const node = (id, n = z.world.layout) => n.id === id ? n : (n.children ?? []).map((c) => node(id, c)).find(Boolean);
+    const zenKeys = async () => {
+      await leaderKey(z, "u");
+      fire(find(z.leader.render(), "leader"), "on_key_down", { key: "z", key_char: "z" }, z.cx);
+      return plain(z.takeCalls());
+    };
+
+    const on = (await zenKeys()).filter(([n]) => n.startsWith("layout.") || n === "pane.zoom");
+    assert.deepEqual(on.slice(-3), [["layout.hide", { id: "sidebar" }], ["layout.resize", { id: "tabs-row", px: 0 }], ["pane.zoom", { pane: "p1" }]]);
+    assert.ok(z.shared("zen"));
+    assert.equal(node("tabs-row").hidden, undefined, "the buffer row stays shown, at 0 px");
+    assert.deepEqual(node("tabs-row").size, { px: 0 });
+    assert.equal(node("sidebar").hidden, true);
+    ok("<leader>uz: hides the sidebar, shrinks the buffer row to 0 px (still shown), zooms the pane");
+
+    z.world.panes.find((p) => p.pane === "p1").zoomed = true; // the fake doesn't play pane.zoom
+    const off = (await zenKeys()).filter(([n]) => n.startsWith("layout.") || n === "pane.zoom");
+    // ctrl-space reached the bufferline: it showed the hidden sidebar for the leader ("openSidebar"), the leader took
+    // "uz", closed (hiding both again), then zen put back what it hid.
+    assert.equal(z.shared("leader.open").sidebarHidden, true);
+    assert.deepEqual(off.slice(0, 2), [["layout.hide", { id: "leader" }], ["layout.hide", { id: "sidebar" }]]);
+    assert.deepEqual(off.slice(-3), [["layout.show", { id: "sidebar" }], ["layout.resize", { id: "tabs-row", px: 36 }], ["pane.zoom", { pane: "p1" }]]);
+    assert.equal(z.shared("zen"), null);
+    assert.deepEqual(node("tabs-row").size, { px: 36 });
+    assert.equal(node("sidebar").hidden, false);
+    ok("in zen, ctrl-space still opens the leader, and <leader>uz leaves zen: sidebar and 36 px buffer row back");
+
+    // The trap itself, so this check would catch it again: with the buffer row hidden, ctrl-space reaches nothing.
+    z.takeCalls();
+    node("tabs-row").hidden = true;
+    z.command(MODS.bufferline, "leader");
+    await z.settle(); z.flushTimers(); await z.settle();
+    assert.deepEqual(plain(z.takeCalls()), []);
+    ok("the fake as Herdr: a hidden bufferline gets no ctrl-space (the #15 trap)");
+  }
+
   noSpawnErrors();
   console.log("leader-jump: all passed");
 })().catch((e) => { console.error(e); process.exit(1); });

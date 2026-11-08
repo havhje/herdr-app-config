@@ -11,8 +11,8 @@
 //
 // What it plays: spaces/agents/panes/terminals/focused derived from one small world (a space's and a tab's
 // status is its most urgent agent's, blocked > done > working > idle, as herdr.d.ts says); shared/setShared;
-// run (recorded; pane/agent focus, space.select and layout show/hide/select also change the world, and
-// `<mod>.<command>` reaches that mod's nextCommand); notify/openOverlay (recorded); the shown layout;
+// run (recorded; pane/agent focus, space.select and layout show/hide/resize/select also change the world, and
+// `<mod>.<command>` reaches that mod's shown copies' nextCommand); notify/openOverlay (recorded); the shown layout;
 // a theme whose every colour reads as its own name ("#working"); timers you flush by hand.
 // It knows nothing of any one mod: mod folders are named once, in MODS below.
 
@@ -220,11 +220,28 @@ function fakeHerdr(opts = {}) {
     } else if (name === "layout.show" || name === "layout.hide") {
       const n = node(args.id);
       if (n) n.hidden = name === "layout.hide";
+    } else if (name === "layout.resize") {
+      const n = node(args.id);
+      if (n) n.size = args.px != null ? { px: args.px } : { weight: args.weight };
     } else if (name === "layout.select") {
       const n = node(args.stack);
       if (n) n.active = args.child;
-    } else for (const m of loaded) if (m.name === mod) m.command(cmd);
+    } else deliver(mod, cmd);
   }
+
+  // `<mod>.<command>` reaches shown copies only (AGENTS.md). A copy sits in the layout block naming its mod and props;
+  // it is shown when nothing above it is hidden (a 0 px node still counts as shown). A copy with no block (a pane
+  // header, a mod loaded on its own) always gets it.
+  function blocksOf(n, h, up = []) {
+    const here = [...up, n];
+    const mine = n.content?.mod === h.name && JSON.stringify(n.content.props ?? {}) === JSON.stringify(h.props) ? [here] : [];
+    return [...mine, ...(n.children ?? []).flatMap((c) => blocksOf(c, h, here))];
+  }
+  function shown(h) {
+    const at = blocksOf(world.layout, h);
+    return !at.length || at.some((path) => path.every((n) => !n.hidden));
+  }
+  function deliver(mod, cmd) { for (const m of loaded) if (m.name === mod && shown(m)) m.command(cmd); }
 
   // Looking at a done agent makes it idle (herdr.d.ts, AgentInfo.status).
   function focusPane(pane) {
@@ -294,7 +311,7 @@ function fakeHerdr(opts = {}) {
     const view = new Mod();
     view.init?.(props, cx);
     const handle = {
-      name, view,
+      name, view, props,
       render: () => snapshot(view.render(cx)),
       command(c) { if (waiting.length) waiting.shift()(c); else queue.push(c); },
     };
@@ -324,8 +341,8 @@ function fakeHerdr(opts = {}) {
     setStatus(address, status) { termOf(address).status = status; },
     terminal: termOf,
     focusPane,
-    // A key command for a mod (keys.json "<mod>:<command>"), to every loaded copy.
-    command(mod, c) { for (const m of loaded) if (m.name === mod) m.command(c); },
+    // A key command for a mod (keys.json "<mod>.<command>"), to every shown copy, as the app does.
+    command: deliver,
     // Lets spawned tasks and command loops run.
     settle: () => new Promise((r) => setImmediate(r)),
     // Runs every pending `after` timer once (and any it adds).

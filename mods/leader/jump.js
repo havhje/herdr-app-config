@@ -60,13 +60,17 @@ export function jumpBy(d) {
   focusPane(j.list[at].pane);
 }
 
-// Zen: the shown pane alone. Remembers what it hid (and whether it zoomed) to put back the second time.
+// Zen: the shown pane alone. Remembers what it hid, shrank (and whether it zoomed) to put back the second time.
 // bufferline leaves the tab row and side panel alone while shared "zen" is set.
-const ZEN_HIDE = ["sidebar", "tabs-row", "tab-row", "panel"];
+// The buffer row is shrunk to 0 px, not hidden: its bufferline holds ctrl-space (ADR 0003), and `<mod>.<command>`
+// reaches shown copies only. A 0 px row still counts as shown (tried in the app, #15); hidden, zen was a trap.
+const ZEN_HIDE = ["sidebar", "tab-row", "panel"];
+const ZEN_SHRINK = "tabs-row";
 export function zen(open) {
   const z = shared("zen");
   if (z) {
     for (const id of z.hid) run("layout.show", { id });
+    if (z.shrunk) run("layout.resize", { id: ZEN_SHRINK, px: z.shrunk });
     const p = panes().find((x) => x.pane === z.zoomed);
     if (p?.zoomed) run("pane.zoom", { pane: p.pane });
     setShared("zen", null);
@@ -75,10 +79,13 @@ export function zen(open) {
   const root = layout();
   // The sidebar counts as shown when the leader showed it only for itself.
   const hid = ZEN_HIDE.filter((id) => { const n = find(root, id); return n && !n.hidden && !(id === "sidebar" && open?.sidebarHidden); });
+  const row = find(root, ZEN_SHRINK);
+  const shrunk = row && !row.hidden && row.size?.px > 0 ? row.size.px : null;
   const p = panes().find((x) => x.pane === open?.pane);
   const zoom = p && !p.zoomed && panes().filter((x) => x.tab === p.tab).length > 1;
-  setShared("zen", { hid, zoomed: zoom ? p.pane : null });
+  setShared("zen", { hid, shrunk, zoomed: zoom ? p.pane : null });
   for (const id of hid) run("layout.hide", { id });
+  if (shrunk) run("layout.resize", { id: ZEN_SHRINK, px: 0 });
   if (zoom) run("pane.zoom", { pane: p.pane });
 }
 
