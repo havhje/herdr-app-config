@@ -24,19 +24,20 @@ const shown = (h) => {
   assert.deepEqual(shown(h), [
     "1-9 Buffer N",
     "e Explorer (files)",
-    "f Find in terminal",
     "i Jump forward",
+    "n Status log",
     "o Jump back",
     "SPC Find agent",
-    ": Command palette",
-    "å Next agent that needs me",
-    "Å Prev agent that needs me",
+    "? Key help",
+    "` Other buffer",
     "a +agents",
     "b +buffer",
     "g +git",
     "t +tabs",
     "u +ui",
     "w +panes",
+    "å +next",
+    "Å +prev",
   ]);
   ok("top level: every key, <space> as SPC, in which-key's order");
 
@@ -47,11 +48,14 @@ const shown = (h) => {
     "f Focus agents list",
     "g Toggle grouping (buffer/status)",
     "i Toggle idle agents",
-    "n Next agent",
-    "N Prev agent",
     "p Pin/unpin agent",
   ]);
-  ok("a group: sorted the same way, lower case before upper");
+  ok("a group: sorted the same way");
+
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "Å", key_char: "Å" }, h.cx);
+  assert.deepEqual(shown(h), ["a Agent that needs me", "b Buffer", "t Tab"]);
+  ok("Å +prev: like nvim's [ (å +next the same)");
 
   noSpawnErrors();
   console.log("leader-menu: all passed");
