@@ -375,6 +375,8 @@ export default class Explorer extends View {
     else if (k === "ctrl-u") this.move(list, i - page, cx);
     else if (c === "G" || k === "shift-g") this.move(list, list.length - 1, cx);
     else if (k === "g") { if (g && Date.now() - g < 600) this.move(list, 0, cx); else this.g = Date.now(); }
+    // gs: the Changes view on and off (LazyVim's c is copy, so not c).
+    else if (k === "s" && g && Date.now() - g < 600) { this.changedOnly = !this.changedOnly; cx.notify(); }
     else if ((k === "l" || k === "enter" || k === "right") && row) {
       if (!row.entry.dir) this.edit(row.path, cx);
       else if (!this.folders.has(row.path)) this.toggle(row.path, cx);
@@ -385,12 +387,11 @@ export default class Explorer extends View {
         const parent = row.path.includes("/") ? row.path.slice(0, row.path.lastIndexOf("/")) : null;
         if (parent) this.move(list, list.findIndex((r) => r.path === parent), cx);
       }
-    } else if (k === "p" && row && !row.entry.dir) this.show(row.path, cx);
+    } else if ((c === "P" || k === "shift-p") && row && !row.entry.dir) this.show(row.path, cx);
     else if (k === "/") { this.indexKey = null; this.loadIndex(cx); this.prompt("filter", row, this.filter, cx); }
     else if (k === "a") this.prompt("add", row, "", cx);
     else if (k === "r" && row) this.prompt("rename", row, row.entry.name, cx);
     else if (k === "d" && row) this.prompt("delete", row, "", cx);
-    else if (k === "c") { this.changedOnly = !this.changedOnly; cx.notify(); }
     else if (k === "escape" && this.filter) { this.filter = ""; cx.notify(); }
     else if (k === "escape") run("pane.go", { direction: "right" });
     // q closes the explorer, as in nvim.

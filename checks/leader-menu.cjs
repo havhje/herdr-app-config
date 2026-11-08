@@ -22,7 +22,6 @@ const shown = (h) => {
   await h.settle(); h.flushTimers(); await h.settle();
 
   assert.deepEqual(shown(h), [
-    "1-9 Buffer N",
     "e Explorer (files)",
     "i Jump forward",
     "o Jump back",
@@ -31,9 +30,9 @@ const shown = (h) => {
     "a +agents",
     "b +buffer",
     "g +git",
-    "t +tabs",
     "u +ui",
     "w +panes",
+    "TAB +tabs",
     "å +next",
     "Å +prev",
   ]);
@@ -53,6 +52,12 @@ const shown = (h) => {
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "Å", key_char: "Å" }, h.cx);
   assert.deepEqual(shown(h), ["a Agent that needs me", "b Buffer", "t Tab"]);
   ok("Å +prev: like nvim's [ (å +next the same)");
+
+  // LazyVim's <leader><tab>: tab is "tab" (Herdr's key name), shown as TAB.
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "tab" }, h.cx);
+  assert.deepEqual(shown(h), ["d Close tab", "r Rename tab", "TAB New tab", "å Next tab", "Å Previous tab"]);
+  ok("<tab> +tabs: LazyVim's tab group");
 
   // The sidebar hidden: ctrl-space shows it just for the leader. <leader>aa must keep it, or the agents list it
   // focuses is hidden again and gets nothing.

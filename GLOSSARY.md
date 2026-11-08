@@ -105,7 +105,7 @@ The file tree in the side panel, driven by nvim keys.
 _Avoid_: files panel, file browser, tree
 
 **Changes view**:
-The explorer showing only changed files and their folders, each with lines added and removed; `c` in the explorer or `<leader>gg` switches to it.
+The explorer showing only changed files and their folders, each with lines added and removed; `gs` in the explorer or `<leader>gg` switches to it.
 _Avoid_: changes list, diff panel, git panel
 
 **Chrome**:

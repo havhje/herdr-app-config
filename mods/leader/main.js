@@ -1,5 +1,5 @@
 // which-key for Herdr: ctrl-space opens it at the bottom, like nvim's leader popup.
-// It lists the keys that can come next; a group (b, w, t) shows its own keys; Esc or backspace goes back/closes.
+// It lists the keys that can come next; a group (b, w, <tab>) shows its own keys; Esc or backspace goes back/closes.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, spaces, panes, layout, shared, setShared, settings, focused, nextCommand, openOverlay } from "herdr";
@@ -48,7 +48,7 @@ const TREE = {
   b: { label: "+buffer", keys: {
     b: ["Other buffer", otherBuffer],
     d: ["Delete buffer", () => run("space.close", { id: active()?.id })],
-    r: ["Rename buffer", () => run("space.rename", { id: active()?.id })],
+    R: ["Rename buffer", () => run("space.rename", { id: active()?.id })],
     N: ["New buffer", cmd("space.new")],
   } },
   w: { label: "+panes", keys: {
@@ -61,14 +61,18 @@ const TREE = {
     k: ["Go up", cmd("pane.go", { direction: "up" })],
     l: ["Go right", cmd("pane.go", { direction: "right" })],
   } },
-  t: { label: "+tabs", keys: {
-    n: ["New tab", cmd("tab.new")],
+  // LazyVim's <leader><tab> tabs group.
+  tab: { label: "+tabs", keys: {
+    tab: ["New tab", cmd("tab.new")],
+    // å/Å for ] and [, as in my nvim keymaps.lua (Norwegian layout).
+    "å": ["Next tab", cmd("tab.next")],
+    "Å": ["Previous tab", cmd("tab.prev")],
     d: ["Close tab", cmd("tab.close")],
     r: ["Rename tab", cmd("tab.rename")],
   } },
   e: ["Explorer (files)", panel("files")],
   g: { label: "+git", keys: {
-    // The explorer's changed-only view (c in the explorer switches back).
+    // The explorer's changed-only view (gs in the explorer switches back).
     g: ["Git changes", () => { run("layout.select", { stack: "panel-body", child: "files" }); run("layout.show", { id: "panel" }); setShared("files.changed", Date.now()); }],
     w: ["New worktree", worktree("new")],
     o: ["Open worktree", worktree("open")],
@@ -92,16 +96,15 @@ const TREE = {
     s: ["Settings", cmd("app.settings")],
     m: ["Add machine", cmd("mod.open", { name: "machine-add" })],
     l: ["Next layout", cmd("layout.switch")],
-    t: ["Theme", cmd("app.settings", { section: "look" })],
+    C: ["Theme (colorscheme)", cmd("app.settings", { section: "look" })],
     z: ["Zen mode toggle", (open) => zen(open)],
   } },
-  ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), [`Buffer ${n}`, cmd("space.select", { index: n })]])),
 };
 
 // The order nvim's which-key shows keys in (its default sort: group, alphanum, mod, then natural, case), so a key sits
-// where it would in nvim. Space counts as which-key's "<Space>". Unlike Lua's ASCII-only lower(), å/Å lower-case
+// where it would in nvim. Space and tab count as which-key's "<Space>" and "<Tab>". Unlike Lua's ASCII-only lower(), å/Å lower-case
 // too, so å (next) comes before Å (prev), as a before A.
-const wkKey = (k) => (k === " " ? "<Space>" : k);
+const wkKey = (k) => (k === " " ? "<Space>" : k === "tab" ? "<Tab>" : k);
 const SORTERS = [
   ([, v]) => (Array.isArray(v) ? 0 : 1),
   ([k]) => (/^[A-Za-z0-9]+$/.test(wkKey(k)) ? 0 : 1),
@@ -142,7 +145,7 @@ export default class Leader extends View {
     cx.stop_propagation();
     if (e.key === "escape") return this.close();
     if (e.key === "backspace") { if (this.path.length) { this.path.pop(); cx.notify(); } else this.close(); return; }
-    const k = e.key === "space" ? " " : (e.key_char ?? e.key);
+    const k = e.key === "space" ? " " : e.key === "tab" ? "tab" : (e.key_char ?? e.key);
     const entry = this.level().keys[k];
     if (!entry) return;
     if (!Array.isArray(entry)) { this.path.push(k); cx.notify(); return; }
@@ -159,13 +162,13 @@ export default class Leader extends View {
 
   render(cx) {
     const t = theme(), font = settings().font ?? "JetBrains Mono";
-    const entries = Object.entries(this.level().keys).filter(([k]) => this.path.length || !/^[2-9]$/.test(k)).sort(byWhichKey);
+    const entries = Object.entries(this.level().keys).sort(byWhichKey);
     const row = ([k, v]) => {
       const group = !Array.isArray(v);
       return h_flex().h(22).gap(10).items_center()
-        .child(div().w(28).text_color(t.accent).font_bold().child(k === "1" && !this.path.length ? "1-9" : k === " " ? "SPC" : k))
+        .child(div().w(28).text_color(t.accent).font_bold().child(k === " " ? "SPC" : k === "tab" ? "TAB" : k))
         .child(div().text_color(t.dim).child("→"))
-        .child(div().flex_1().min_w(0).truncate().text_color(group ? t.ansi5 : t.foreground).child(group ? v.label : (k === "1" && !this.path.length ? "Buffer N" : v[0])));
+        .child(div().flex_1().min_w(0).truncate().text_color(group ? t.ansi5 : t.foreground).child(group ? v.label : v[0]));
     };
     const crumb = ["<leader>", ...this.path].join(" ");
     return v_flex().id("leader").size_full().min_h(0).track_focus(this.h).on_key_down((e, cx) => this.key(e, cx))
