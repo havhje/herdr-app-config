@@ -29,18 +29,19 @@ const pick = (mode) => openOverlay({ mod: "agent-finder", kind: "dialog", width:
 
 const otherBuffer = () => { const id = shared("leader.otherBuffer"); if (id && spaces().some((s) => s.id === id)) run("space.select", { id }); };
 
-// Like nvim: next/prev live only under æ/ø (its ]/[; where they sit on the Norwegian keyboard); the leader groups hold actions.
+// Like my nvim: next/prev live only under ¨/å, its ]/[ (the keys where ] and [ sit on a US keyboard;
+// needs the Norwegian layout without dead keys). The leader groups hold actions.
 const TREE = {
   " ": ["Find agent", () => pick("agents")],
   "?": ["Key help", cmd("app.help")],
   o: ["Jump back", () => jumpBy(-1)],
   i: ["Jump forward", () => jumpBy(1)],
-  "æ": { label: "+next", keys: {
+  "¨": { label: "+next", keys: {
     a: ["Agent that needs me", (open) => nextNeed(1, open)],
     b: ["Buffer", cmd("space.next")],
     t: ["Tab", cmd("tab.next")],
   } },
-  "ø": { label: "+prev", keys: {
+  "å": { label: "+prev", keys: {
     a: ["Agent that needs me", (open) => nextNeed(-1, open)],
     b: ["Buffer", cmd("space.prev")],
     t: ["Tab", cmd("tab.prev")],
@@ -64,9 +65,9 @@ const TREE = {
   // LazyVim's <leader><tab> tabs group.
   tab: { label: "+tabs", keys: {
     tab: ["New tab", cmd("tab.new")],
-    // LazyVim's ] and [ here; on the Norwegian keyboard æ sits where ] is and ø where [ is.
-    "æ": ["Next tab", cmd("tab.next")],
-    "ø": ["Previous tab", cmd("tab.prev")],
+    // LazyVim's ] and [ here, as ¨ and å (see +next/+prev).
+    "¨": ["Next tab", cmd("tab.next")],
+    "å": ["Previous tab", cmd("tab.prev")],
     d: ["Close tab", cmd("tab.close")],
     r: ["Rename tab", cmd("tab.rename")],
   } },
@@ -102,7 +103,7 @@ const TREE = {
 };
 
 // The order nvim's which-key shows keys in (its default sort: group, alphanum, mod, then natural, case), so a key sits
-// where it would in nvim. Space and tab count as which-key's "<Space>" and "<Tab>". æ (next) comes before ø (prev).
+// where it would in nvim. Space and tab count as which-key's "<Space>" and "<Tab>". ¨ (next) sorts before å (prev).
 const wkKey = (k) => (k === " " ? "<Space>" : k === "tab" ? "<Tab>" : k);
 const SORTERS = [
   ([, v]) => (Array.isArray(v) ? 0 : 1),

@@ -33,8 +33,8 @@ const shown = (h) => {
     "u +ui",
     "w +panes",
     "TAB +tabs",
-    "æ +next",
-    "ø +prev",
+    "¨ +next",
+    "å +prev",
   ]);
   ok("top level: every key, <space> as SPC, in which-key's order");
 
@@ -49,14 +49,14 @@ const shown = (h) => {
   ok("a group: sorted the same way");
 
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
-  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "ø", key_char: "ø" }, h.cx);
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "å", key_char: "å" }, h.cx);
   assert.deepEqual(shown(h), ["a Agent that needs me", "b Buffer", "t Tab"]);
-  ok("ø +prev: like nvim's [ (æ +next the same)");
+  ok("å +prev: like nvim's [ (¨ +next the same)");
 
   // LazyVim's <leader><tab>: tab is "tab" (Herdr's key name), shown as TAB.
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "tab" }, h.cx);
-  assert.deepEqual(shown(h), ["d Close tab", "r Rename tab", "TAB New tab", "æ Next tab", "ø Previous tab"]);
+  assert.deepEqual(shown(h), ["d Close tab", "r Rename tab", "TAB New tab", "¨ Next tab", "å Previous tab"]);
   ok("<tab> +tabs: LazyVim's tab group");
 
   // The sidebar hidden: ctrl-space shows it just for the leader. <leader>aa must keep it, or the agents list it
