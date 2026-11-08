@@ -36,7 +36,7 @@ const TREE = {
   b: { label: "+buffer", keys: {
     n: ["Next buffer", cmd("space.next")],
     p: ["Prev buffer", cmd("space.prev")],
-    b: ["Other buffer", () => { const id = shared("leader.prevSpace"); if (id && spaces().some((s) => s.id === id)) run("space.select", { id }); }],
+    b: ["Other buffer", () => { const id = shared("leader.otherBuffer"); if (id && spaces().some((s) => s.id === id)) run("space.select", { id }); }],
     d: ["Delete buffer", () => run("space.close", { id: active()?.id })],
     r: ["Rename buffer", () => run("space.rename", { id: active()?.id })],
     N: ["New buffer", cmd("space.new")],
@@ -99,10 +99,13 @@ export default class Leader extends View {
   init(_props, cx) {
     this.h = cx.focus_handle();
     this.path = [];
-    // lite-tabs shows the panel on us (ctrl-space), then sends "focus": take the keyboard, start at the top.
+    // ctrl-space: lite-tabs shows us (and the sidebar, if hidden), then sends "open", or "openSidebar" when it had to
+    // show the sidebar. Note where we came from, take the keyboard, start at the top.
     cx.spawn(async (cx) => {
       for (;;) {
-        if (await nextCommand() !== "focus") continue;
+        const c = await nextCommand();
+        if (c !== "open" && c !== "openSidebar") continue;
+        setShared("leader.open", { gen: Date.now(), pane: focused()?.pane ?? null, sidebarHidden: c === "openSidebar" });
         this.path = []; this.h.focus(); cx.notify();
       }
     });

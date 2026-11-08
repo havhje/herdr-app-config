@@ -173,6 +173,57 @@ function start(build) {
     ok("needs-me queue: an agent with a stuck sub-agent is in it; a settled done one isn't");
   }
 
+  {
+    // A turn that failed needs me as a question does: an agent whose own terminal says `error` is in the queue as
+    // blocked (ahead of a done one), though agents() has no such word (the fake gives it as idle there, as Herdr does).
+    const e = start((h) => {
+      h.addSpace({ id: "s1", name: "alpha", tabs: [{ id: "b1", changed_at: 50 }, { id: "b2", changed_at: 100 }, { id: "b3" }] });
+      h.addPane({ pane: "p1", tab: "b1", terminal: "t1", status: "done" });
+      h.addPane({ pane: "p2", tab: "b2", terminal: "t2", status: "error" });
+      h.addPane({ pane: "p3", tab: "b3" });
+    });
+    e.focusPane("p3"); land(e);
+    await leaderKey(e, "å");
+    assert.equal(at(e), "p2", "the errored agent first: it reads blocked");
+    await leaderKey(e, "å");
+    assert.equal(at(e), "p1");
+    ok("needs-me queue: an agent whose own terminal is in error is in it, as blocked");
+  }
+
+  {
+    // <leader>bb: back to the buffer shown before this one (noted as the bufferline redraws).
+    const b = start((h) => {
+      h.addSpace({ id: "s1", name: "alpha", tabs: [{ id: "b1" }] });
+      h.addSpace({ id: "s2", name: "beta", tabs: [{ id: "b2" }] });
+      h.addPane({ pane: "p1", tab: "b1" });
+      h.addPane({ pane: "p2", tab: "b2" });
+    });
+    b.focusPane("p1"); land(b);
+    b.focusPane("p2"); land(b);
+    await leaderKey(b, "b");
+    fire(find(b.leader.render(), "leader"), "on_key_down", { key: "b", key_char: "b" }, b.cx);
+    assert.equal(at(b), "p1");
+    ok("<leader>bb: back to the buffer shown before");
+
+    // The leader sits in the sidebar: a hidden sidebar shows for it, and hides again when the leader closes.
+    b.command(MODS.bufferline, "leader");
+    await b.settle();
+    b.flushTimers();
+    await b.settle();
+    b.takeCalls();
+    fire(find(b.leader.render(), "leader"), "on_key_down", { key: "escape" }, b.cx);
+    assert.deepEqual(plain(b.takeCalls()), [["layout.hide", { id: "leader" }], ["pane.focus", { pane: "p1" }]]);
+    b.world.layout.children.find((n) => n.id === "sidebar").hidden = true;
+    b.command(MODS.bufferline, "leader");
+    await b.settle();
+    b.flushTimers();
+    await b.settle();
+    assert.deepEqual(plain(b.takeCalls()).filter(([n]) => n.startsWith("layout.")), [["layout.show", { id: "sidebar" }], ["layout.show", { id: "leader" }]]);
+    fire(find(b.leader.render(), "leader"), "on_key_down", { key: "escape" }, b.cx);
+    assert.deepEqual(plain(b.takeCalls()), [["layout.hide", { id: "leader" }], ["layout.hide", { id: "sidebar" }], ["pane.focus", { pane: "p1" }]]);
+    ok("ctrl-space with the sidebar hidden: shows it for the leader; esc hides both, keyboard back to the pane");
+  }
+
   noSpawnErrors();
   console.log("leader-jump: all passed");
 })().catch((e) => { console.error(e); process.exit(1); });

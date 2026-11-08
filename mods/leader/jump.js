@@ -1,9 +1,10 @@
 // Moving between agents and places, nvim style: the "needs me" queue (]q over blocked and done agents),
 // the jumplist (ctrl-o / ctrl-i over tabs you were on), zen mode and killing an agent.
-// lite-tabs records the jumplist and the status log (record.js); this file only reads and moves.
+// The jumplist and the status log are kept by leader-records.js (from lib/); this file reads them and moves.
 
 import { agents, panes, run, shared, setShared, notify, openOverlay, layout } from "herdr";
 import { needsMeQueue } from "./agent-status.js";
+import { jumpTo } from "./leader-records.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -48,16 +49,15 @@ export function nextNeed(d, open) {
 }
 
 // The jumplist lives in shared "jumps": { list: [{space, tab, pane}], at, going }. Moving sets `at` and
-// `going` first, so the recorder knows this arrival is a move along the list, not a new jump.
+// `going` first (jumpTo), so the recorder knows this arrival is a move along the list, not a new jump.
 export function jumpBy(d) {
   const j = shared("jumps");
   const live = new Set(panes().map((p) => p.pane));
   let at = (j?.at ?? 0) + d;
   while (j && at >= 0 && at < j.list.length && !live.has(j.list[at].pane)) at += d;
   if (!j || at < 0 || at >= j.list.length) return say(d < 0 ? "No older jump" : "No newer jump");
-  const to = j.list[at];
-  setShared("jumps", { ...j, at, going: { tab: to.tab, until: Date.now() + 1500 } });
-  focusPane(to.pane);
+  jumpTo(at);
+  focusPane(j.list[at].pane);
 }
 
 // Zen: the shown pane alone. Remembers what it hid (and whether it zoomed) to put back the second time.

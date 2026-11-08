@@ -1,7 +1,7 @@
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { props, spaces, panes, agents, run, theme, shared, setShared, layout, settings, nextCommand, focused, exec } from "herdr";
-import { recordJump, recordStatus } from "./record.js";
+import { props, spaces, panes, agents, run, theme, shared, layout, settings, nextCommand, exec } from "herdr";
+import { record } from "./leader-records.js";
 import { statusReader, mark, colour, glyph } from "./agent-status.js";
 
 function find(node, id) {
@@ -18,17 +18,17 @@ export default class Tabs extends View {
     // A second copy (props {role:"tabs"}) draws only the tab row; the rest is the bufferline's job.
     this.role = props()?.role ?? "buffers";
     if (this.role === "tabs") return;
-    // ctrl-space (keys.json: lite-tabs.leader) shows the leader menu under Agents; it hides itself.
+    // ctrl-space (keys.json: lite-tabs.leader) only shows the leader menu; the leader does the rest. The key is here,
+    // not the leader's, because `<mod>.<command>` reaches shown copies only (AGENTS.md) and the leader is hidden until
+    // opened. It sits in the sidebar: a hidden sidebar shows for it, and the leader is told so, to hide it on close.
     cx.spawn(async (cx) => {
       for (;;) {
         if (await nextCommand() !== "leader") continue;
-        // The leader sits in the sidebar: a hidden sidebar shows for it, and the leader hides it again on close.
-        const bar = find(layout(), "sidebar");
-        setShared("leader.open", { gen: Date.now(), pane: focused()?.pane ?? null, sidebarHidden: Boolean(bar?.hidden) });
-        if (bar?.hidden) run("layout.show", { id: "sidebar" });
+        const sidebarHidden = Boolean(find(layout(), "sidebar")?.hidden);
+        if (sidebarHidden) run("layout.show", { id: "sidebar" });
         run("layout.show", { id: "leader" });
-        // Once it's shown (commands reach shown copies only), hand it the keyboard.
-        cx.timer.after(60, () => run("leader.focus"));
+        // Herdr gives no "now shown" signal, so wait a beat for it to show (and start, the first time).
+        cx.timer.after(60, () => run(sidebarHidden ? "leader.openSidebar" : "leader.open"));
       }
     });
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
@@ -36,8 +36,8 @@ export default class Tabs extends View {
     this.worktrees = {};
     this.checkWorktrees(cx);
     cx.timer.every(5000, (cx) => this.checkWorktrees(cx));
-    // Zen hides this bar; a hidden copy may not redraw, but its timers run: keep recording then too.
-    cx.timer.every(1000, () => { if (shared("zen")) { recordJump(); recordStatus(); } });
+    // Zen hides this bar; a hidden copy may not redraw, but its timers run: keep the leader's records then too.
+    cx.timer.every(1000, () => { if (shared("zen")) record(); });
   }
 
   // A space is a worktree when its git dir isn't its top's own .git (as t3-menu's checkout()).
@@ -94,13 +94,8 @@ export default class Tabs extends View {
     const t = theme(), all = spaces(), font = settings().font ?? "JetBrains Mono";
     if (this.role === "tabs") return this.renderTabs(t, all, font);
     const root = layout();
-    // <leader>bb (leader mod) goes back to the space shown before this one.
-    const now = all.find(p => p.active)?.id;
-    if (now && this.lastActive && now !== this.lastActive) setShared("leader.prevSpace", this.lastActive);
-    this.lastActive = now;
-    // The leader's jumplist (<leader>o/i) and status log (agent finder, <leader><space> then tab) are kept from here (record.js).
-    recordJump();
-    recordStatus();
+    // The leader's records (other buffer, jumplist, status log) are kept as this always-shown bar redraws.
+    record();
     // Zen (<leader>uz) hides the tab row and side panel: leave them, and don't record its closed panel as a choice.
     const zen = Boolean(shared("zen"));
     if (!zen) this.syncPanel(all.find(p => p.active), find(root, "panel"), find(root, "panel-body"), shared("workspace.panels") ?? ["files"]);

@@ -1,8 +1,8 @@
 {
   "agent-pick": ["agent-status.js"],
-  "leader": ["agent-status.js"],
+  "leader": ["agent-status.js", "leader-records.js"],
   "lite-chrome": ["focus.js", "tip.js"],
-  "lite-tabs": ["agent-status.js"],
+  "lite-tabs": ["agent-status.js", "leader-records.js"],
   "t3-agents": ["agent-status.js", "focus.js", "motion.js", "name.js", "project.js", "tip.js"],
   "t3-pane": ["agent-status.js", "focus.js", "name.js", "tip.js"]
 }
