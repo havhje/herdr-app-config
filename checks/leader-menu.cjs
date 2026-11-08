@@ -25,7 +25,6 @@ const shown = (h) => {
     "1-9 Buffer N",
     "e Explorer (files)",
     "i Jump forward",
-    "n Status log",
     "o Jump back",
     "SPC Find agent",
     "? Key help",

@@ -32,7 +32,6 @@ const otherBuffer = () => { const id = shared("leader.otherBuffer"); if (id && s
 // Like nvim: next/prev live only under å/Å (its ]/[); the leader groups hold actions.
 const TREE = {
   " ": ["Find agent", () => pick("agents")],
-  n: ["Status log", () => pick("log")],
   "?": ["Key help", cmd("app.help")],
   o: ["Jump back", () => jumpBy(-1)],
   i: ["Jump forward", () => jumpBy(1)],
