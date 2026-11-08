@@ -1,6 +1,5 @@
 // A space's mark, as T3 Code's sidebar draws a project (ProjectFavicon): the project's own icon when it has
-// one, else a two-letter monogram tinted with a color its name picks. One rule, with a copy in each mod that
-// draws spaces (t3-inbox, t3-spaces, t3-new-menu, t3-tabs).
+// one, else a two-letter monogram tinted with a color its name picks.
 import { image, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, readTextFile, appHome, settings, shared, setShared, spaces, panes } from "herdr";
@@ -39,8 +38,7 @@ function isDark(t) {
   return (n >> 16) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114 < 128;
 }
 
-// `ps`: panes(), read once by the caller (each read copies every pane). `follow`: drawn beside a mod that keeps looking
-// (t3-spaces, t3-inbox), so it asks only where no one has answered yet.
+// `ps`: panes(), read once by the caller (each read copies every pane). `follow`: asks only where no one has answered yet.
 export function projectMark(s, size, t, ps, follow) {
   const icon = s && projectIcon(s, ps, follow);
   if (icon) return image(icon).size(size).flex_none().rounded(size / 4);
@@ -102,7 +100,7 @@ async function lookUp(on, dir) {
   return name;
 }
 
-// Where a space is now, as t3-spaces has it: its first terminal's live folder, else where it was made.
+// Where a space is now: its first terminal's live folder, else where it was made.
 export function placeOf(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps?.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;

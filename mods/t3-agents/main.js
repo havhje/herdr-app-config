@@ -1,36 +1,22 @@
 // Agents in grouped or priority views; a parent reads with its sub-agents (tree.js).
 // A viewed done agent stays in Done until left.
 
-import { View, div, svg } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, spaces, focused, theme, layout, shared, setShared, setAgentOrder, settings, openOverlay, closeOverlay, props, nextCommand, run } from "herdr";
+import { agents, terminals, panes, spaces, focused, theme, shared, setShared, setAgentOrder, nextCommand, run } from "herdr";
 import { notNews, ownStatus, subAgents, treeStatus } from "./tree.js";
-import { glow, tip } from "./tip.js";
-import { stopsInit, stopsEnd, stop, focusRoot, enter, onStop } from "./focus.js";
+import { stopsInit, stopsEnd, focusRoot, enter, onStop } from "./focus.js";
 import { focusAgent } from "./zoom.js";
-import { menuJump } from "./list.js";
-import { MOTION, planMotion, flying, leavingRows } from "./motion.js";
+import { planMotion, flying, leavingRows } from "./motion.js";
 import { agentEntries, agentStatus, STACK, RANK, SECTION } from "./rows.js";
-const SORTS = [
-  { id: "priority", label: "Priority", icon: "clock" },
-  { id: "grouped", label: "Grouped by space", icon: "layers" },
-];
+// <leader>ag flips shared "agents.sort" between these.
+const SORTS = [{ id: "priority" }, { id: "grouped" }];
 const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[0];
-
-const SORT_WIDTH = 200;
 
 export default class Agents extends View {
   async close() { stopsEnd(this); }
 
   init(_props, cx) {
-    if (props()?.sortMenu) {
-      // It takes the keyboard, as the shipped menu does. As T3's menus: nothing's lit until a key or the pointer arrives, and it fades in.
-      this.at = -1;
-      this.keys = cx.focus_handle();
-      this.keys.focus();
-      cx.timer.after(16, (cx) => { this.shown = true; cx.notify(); });
-      return;
-    }
     stopsInit(this, cx);
     // pane.go onto this list (mod.json's "focusable"): the keyboard starts at the heading's button.
     cx.spawn(async (cx) => {
@@ -38,7 +24,7 @@ export default class Agents extends View {
       for (;;) if (await nextCommand() === "focus") {
         const ids = this.navIds ?? [], viewed = `ag-${shared("t3-agents.rows")?.view ?? focused()?.agent}`;
         this.fs.last = null;
-        enter(this, cx, ids.includes(viewed) ? viewed : ids[0] ?? "ag-sort");
+        enter(this, cx, ids.includes(viewed) ? viewed : ids[0]);
       }
     });
     this.folded = JSON.parse(localStorage.getItem("folded") ?? "{}");
@@ -46,11 +32,11 @@ export default class Agents extends View {
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
     cx.timer.every(1000, () => this.compute());
     cx.timer.every(30000, (cx) => cx.notify()); // The rows' times move with nothing else changing.
-    // Older installs kept pins in this list's storage; move them over once, before the inbox writes any.
+    // Older installs kept pins in this list's storage; move them over once, before anything writes any.
     if (shared("agents.pins") == null && localStorage.getItem("pins")) setShared("agents.pins", JSON.parse(localStorage.getItem("pins")));
   }
 
-  // Shared with the inbox (t3-inbox): one set of pins.
+  // Shared with the leader (<leader>ap pins): one set of pins.
   get pins() {
     return shared("agents.pins") ?? [];
   }
@@ -69,7 +55,7 @@ export default class Agents extends View {
   // finished agent turns done into idle, and looking isn't the agent doing anything.
   track(list, now) {
     let dirty = false;
-    // As the tab has it: this list doesn't draw while the Inbox shows, so a frame's time would be when it came back.
+    // As the tab has it: when its state last changed, not when this list first saw it.
     const changedAt = new Map(spaces().flatMap((s) => s.tabs ?? []).map((c) => [c.id, c.changed_at]));
     for (const a of list) {
       const s = a.status === "done" ? "idle" : a.status;
@@ -114,48 +100,6 @@ export default class Agents extends View {
   word(a) {
     const sawDone = a.address === this.held?.address && this.held.rank === RANK.done && a.status === "idle";
     return sawDone ? "done" : a.status;
-  }
-
-  sortMenu(t) {
-    const on = sortOf().id;
-    const choose = (s) => {
-      setShared("agents.sort", s.id);
-      closeOverlay(props().overlay);
-    };
-    return v_flex()
-      .id("sort-menu")
-      .w_full()
-      .p(4)
-      .bg(t.popover)
-      .text_size(14)
-      .opacity(this.shown ? 1 : 0).transition("opacity", MOTION)
-      .track_focus(this.keys).on_key_down((e, cx) => {
-        if (e.key === "enter") { if (this.at >= 0) choose(SORTS[this.at]); }
-        else if (e.key === "escape") closeOverlay(props().overlay);
-        else {
-          const to = menuJump(this, e, SORTS.map((s) => s.label), this.at);
-          if (to < 0) return;
-          this.at = to;
-        }
-        cx.stop_propagation();
-        cx.notify();
-      })
-      .child(div().px(8).py(6).text_size(12).line_height("16px").font_medium().text_color(t.muted).child("Sort agents"))
-      .children(SORTS.map((s, i) => h_flex()
-        .id(`sort-${s.id}`)
-        .h(28)
-        .px(8)
-        .gap(8)
-        .rounded(4)
-        .items_center()
-        .text_color(t.foreground)
-        .role("button").accessibility_label(s.label)
-        .when(i === this.at, el => el.bg(t.selected))
-        .on_hover((over, cx) => { if (over && this.at !== i) { this.at = i; cx.notify(); } })
-        .on_click(() => choose(s))
-        .child(svg(`mods/t3-agents/icons/${s.icon}.svg`).size(16).mx(-2).flex_none().text_color(t.muted))
-        .child(div().flex_1().child(s.label))
-        .when(s.id === on, (el) => el.child(svg("mods/t3-agents/icons/check.svg").size(14).flex_none().text_color(t.foreground)))));
   }
 
   status(t, a, note = "", id) {
@@ -209,17 +153,14 @@ export default class Agents extends View {
     // counts: Idle folds by default, and leaving a row there would take it off the walk, with no key back.
     const order = [...new Set(groups.flatMap(g => g.members.map(a => a.address)))];
     const view = order.includes(ancestor) ? ancestor : null;
-    const find = (n) => n?.id === "sidebar-lists" ? n : (n?.children ?? []).map(find).find(Boolean);
-    if (find(layout())?.active !== "inbox") {
-      const drawn = { order, view };
-      if (JSON.stringify(drawn) !== JSON.stringify(shared("t3-agents.rows") ?? null)) setShared("t3-agents.rows", drawn);
-      const addresses = list.map(a => a.address), key = JSON.stringify(addresses);
-      if (key !== this.agentOrder || shared("t3-agent-order") !== "lists") {
-        this.agentOrder = key;
-        setAgentOrder(addresses);
-        if (shared("t3-agent-order") !== "lists") setShared("t3-agent-order", "lists");
-      }
-    } else this.agentOrder = null;
+    // The agent in view, read back when the list takes the keyboard (nextCommand "focus").
+    const drawn = { order, view };
+    if (JSON.stringify(drawn) !== JSON.stringify(shared("t3-agents.rows") ?? null)) setShared("t3-agents.rows", drawn);
+    const addresses = list.map(a => a.address), key = JSON.stringify(addresses);
+    if (key !== this.agentOrder) {
+      this.agentOrder = key;
+      setAgentOrder(addresses);
+    }
     return { sort, list, all, shown, ps, now, viewing, byPriority, own, shownStatus, pinned, groups };
   }
 
@@ -237,7 +178,7 @@ export default class Agents extends View {
     else if (k === "k" || k === "up") go(i < 0 ? 0 : i - 1);
     else if (k === "shift-g" || e.key_char === "G") go(ids.length - 1);
     else if (k === "g") { if (g && Date.now() - g < 600) go(0); else this.g = Date.now(); }
-    else if ((k === "l" || k === "right" || k === "enter") && id.startsWith("ag-") && id !== "ag-sort") { focusAgent(id.slice(3)); run("pane.focus", { terminal: id.slice(3) }); }
+    else if ((k === "l" || k === "right" || k === "enter") && id.startsWith("ag-")) { focusAgent(id.slice(3)); run("pane.focus", { terminal: id.slice(3) }); }
     else if (k === "h" || k === "left" || k === "escape") run("pane.go", { direction: "left" });
     else return;
     cx.stop_propagation();
@@ -245,22 +186,16 @@ export default class Agents extends View {
 
   render(cx) {
     const t = theme();
-    if (props()?.sortMenu) return this.sortMenu(t);
     const data = this.compute();
     const { sort, list } = data;
     const entries = agentEntries(this, t, data);
 
-    // The list's motion, as t3-inbox's and T3's (Sidebar.motion.ts). Folds and the sort play it too: T3 skips only a bottom shelf's
+    // The list's motion, as T3's (Sidebar.motion.ts). Folds and the sort play it too: T3 skips only a bottom shelf's
     // opening (Sidebar.tsx), and this list starts at the top.
     planMotion(this, entries, cx);
-    // A row no longer drawn has no hover listener, so it never reports the pointer leaving it: forget it, or its card comes back with it.
+    // A row no longer drawn has no hover listener, so it never reports the pointer leaving it: forget it, or it comes back lit.
     const gone = this.hovered;
-    if (gone && !entries.some((e) => e.key === gone)) {
-      this.hovered = this.hot = null;
-      this.detailsWait?.cancel();
-      if (this.details === gone) this.details = null;
-      if (this.detailsOut === gone) this.detailsOut = null;
-    }
+    if (gone && !entries.some((e) => e.key === gone)) this.hovered = this.hot = null;
     const rows = entries.map((e) => flying(this, e.key, e.el));
     this.navIds = entries.filter((e) => !e.key.startsWith("sub-") && !e.key.startsWith("m:")).map((e) => `ag-${e.key}`);
 

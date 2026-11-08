@@ -2,8 +2,7 @@
 // props { tab: "pane" | "tab" | "space" | "global", target }.
 // ↑/↓ move, Enter runs, Esc closes. An item is [label, command, args];
 // a command "worktree" opens the worktree dialog instead.
-// t3-menu: Herdr's menu (mod.clone), with a tab's and a pane's Close going through the tab bar (t3-tabs), which asks first
-// while a program runs and leaves first, so Herdr's pick of a neighbour never shows. Only choose() and T3's measures differ from the shipped one.
+// t3-menu: Herdr's menu (mod.clone). Every item runs Herdr's own command; only choose() and T3's measures differ from the shipped one.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -108,7 +107,6 @@ export default class Menu extends View {
     if (!it) return;
     closeOverlay(props()?.overlay);
     if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
-    // The item keeps Herdr's command, for its icon, its divider and its key; only where it goes changes.
     else run(it[1], it[2]);
   }
 

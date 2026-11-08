@@ -97,7 +97,7 @@ export default class Tabs extends View {
     const now = all.find(p => p.active)?.id;
     if (now && this.lastActive && now !== this.lastActive) setShared("leader.prevSpace", this.lastActive);
     this.lastActive = now;
-    // The leader's jumplist (<leader>o/i) and status log (<leader>un) are kept from here (record.js).
+    // The leader's jumplist (<leader>o/i) and status log (agent finder, <leader><space> then tab) are kept from here (record.js).
     recordJump();
     recordStatus();
     // Zen (<leader>uz) hides the tab row and side panel: leave them, and don't record its closed panel as a choice.

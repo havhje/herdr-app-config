@@ -1,5 +1,5 @@
 // Keyboard focus as T3's focus-visible: Tab walks the controls, and what it's on wears a 2px inset ring. The kit has neither a
-// focus_visible builder nor a way to read the input modality, so this keeps both. scripts/sync.sh copies this to the mods that use it.
+// focus_visible builder nor a way to read the input modality, so this keeps both. A copy lives in each mod that uses it.
 // A control tracking a handle takes the keyboard from the terminal when pressed, and the kit can't prevent that, so outside
 // an overlay the window's controls are tab stops only in keyboard mode: pane.go onto a sidebar mod ("focus") starts it, the
 // keyboard leaving every stop ends it. A terminal keeps Tab, so nothing else starts it, and with the mode off nothing here listens.

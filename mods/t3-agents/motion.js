@@ -1,4 +1,4 @@
-// A list's motion and a fold's arrow, as T3's Sidebar.motion.ts. scripts/sync.sh copies this to the mods that use it.
+// A list's motion and a fold's arrow, as T3's Sidebar.motion.ts. A copy lives in each mod that uses it.
 import { div, svg } from "gpui-kit";
 
 export const MOTION = { duration: 150, easing: "ease-out" };

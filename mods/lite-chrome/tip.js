@@ -1,5 +1,5 @@
 // A hover label as T3's (its ui/tooltip.tsx): small and dark, the label with its key, and under it a dim hint if there is one.
-// `.tooltip()` takes only a string, in the shell's own style, hence this. scripts/sync.sh copies this to the mods that use it.
+// `.tooltip()` takes only a string, in the shell's own style, hence this. A copy lives in each mod that uses it.
 import { div } from "gpui-kit";
 import { v_flex, Popup } from "gpui-base";
 import { keys, window } from "herdr";

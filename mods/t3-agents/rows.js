@@ -1,13 +1,12 @@
 // The agents list's rows and group headers, including their leaving ghosts.
 import { div, image, svg } from "gpui-kit";
-import { h_flex, Popup } from "gpui-base";
-import { spaces, run, hc, notify, setShared, openOverlay } from "herdr";
+import { h_flex } from "gpui-base";
+import { spaces, run, openOverlay } from "herdr";
 import { namer } from "./name.js";
 import { focusAgent } from "./zoom.js";
 import { kidStatus } from "./tree.js";
 import { projectMark } from "./project.js";
-import { glow, hoverKept, tip, tipMark } from "./tip.js";
-import { programIcon, detailsFor, detailsAt, detailsLine, detailsCard } from "./details.js";
+import { glow, hoverKept, tip, tipMark, POINTER_WATCH, pointerAt, pointerGone, pointerMoved } from "./tip.js";
 import { stop, within } from "./focus.js";
 import { MOTION, foldArrow } from "./motion.js";
 
@@ -44,8 +43,30 @@ function agentTree(all, addr, lead = []) {
   });
 }
 
+// A row's hover in view.hovered, gone with the pointer even when its leave never comes (see pointerGone), and with it a control lit in the row.
+function rowHover(view, key) {
+  return (over, cx) => {
+    if (over) {
+      view.hovered = key;
+      view.rowBox = null;
+      view.rowWatch?.cancel();
+      const from = pointerAt();
+      view.rowWatch = cx.timer.every(POINTER_WATCH, (cx) => {
+        if (view.hovered === key && !pointerGone(view.rowBox, from)) return;
+        view.rowWatch.cancel();
+        view.rowWatch = null;
+        if (view.hovered !== key) return;
+        view.hovered = view.hot = null;
+        cx.notify();
+      });
+    } else if (view.hovered === key) view.hovered = null;
+    cx.notify();
+  };
+}
+const rowMoved = (view, key) => (e) => { pointerMoved(e.position); if (view.hovered === key) view.rowBox = e.bounds; };
+
 // `ghost`: drawn for its leaving, without handlers or ids the list uses.
-function agentSubRow(view, t, s, shown, card, ghost) {
+function agentSubRow(view, t, s, shown, ghost) {
   const k = s.t;
   const st = kidStatus(k, view.listed);
   const pic = icon(k.program, 14, t.foreground);
@@ -79,19 +100,9 @@ function agentSubRow(view, t, s, shown, card, ghost) {
     .id(rowId)
     .role("button").accessibility_label(name)
     .when(!on, el => el.hover(s => s.bg(t.hover)).active(s => s.bg(t.selected)))
-    .on_hover((over, cx) => {
-      if (over) { view.hovered = rowId; detailsFor(view, rowId, cx); }
-      else if (view.hovered === rowId) { view.hovered = null; detailsFor(view, null, cx); }
-      cx.notify();
-    })
-    .on_mouse_move((e) => detailsAt(view, rowId, e))
-    .on_click((_e, cx) => {
-      // The peek opens where the card stands: no fade, or the two overlap.
-      detailsFor(view, null, cx);
-      view.detailsOut = null;
-      cx.notify();
-      run("terminal.peek", { terminal: k.address });
-    })
+    .on_hover(rowHover(view, rowId))
+    .on_mouse_move(rowMoved(view, rowId))
+    .on_click(() => run("terminal.peek", { terminal: k.address }))
     , 6);
 }
 
@@ -114,7 +125,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     const subs = agentTree(all, a.address);
     const r = { key: a.address, h: ROW + STACK, el: row(a, i, subs), ghost: () => row(a, i, subs, true) };
     // A sub-agent with no pane of its own isn't in agents(): it's placed by the agent it hangs from, and has no branch to name, as its folder may be another worktree.
-    const sub = (s) => ({ key: `sub-${s.t.address}`, h: ROW + STACK, el: agentSubRow(view, t, s, shown, (name, key) => details(list.find((x) => x.address === s.t.address) ?? { ...s.t, space: a.space, space_name: a.space_name }, name, key)), ghost: () => agentSubRow(view, t, s, shown, null, true) });
+    const sub = (s) => ({ key: `sub-${s.t.address}`, h: ROW + STACK, el: agentSubRow(view, t, s, shown), ghost: () => agentSubRow(view, t, s, shown, true) });
     if (!view.isFolded(a.address)) return [r, ...subs.map(sub)];
     // Folded, a sub-agent that needs the person still shows, hung straight from its parent.
     const stuck = subs.filter((s) => kidStatus(s.t, view.listed) === "blocked");
@@ -161,21 +172,6 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     if (detail.get(a.address) == null && seen[`${a.space_name}\u0000`] > 1) detail.set(a.address, label(a));
   }
 
-  // A row's details, as t3-inbox's and T3's thread card: on the row's right from its top. A control lit in the row speaks for itself instead.
-  // `key`: a sub-agent with a pane is also listed on its own, and each of its rows goes by itself.
-  const details = (a, name, key = a.address) => {
-    const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
-    const branch = ps.find((p) => p.pane === a.pane)?.branch, pic = programIcon(a.program, 12, t.muted);
-    const up = view.details === key || view.detailsOut === key;
-    return Popup.new(`details-${key}`, div()).absolute().top(-1).right(-1).size(1)
-      .when(up, (pop) => pop.content(detailsCard(view, t, key, name, [
-        a.space_name && detailsLine(t, projectMark(spaces().find((s) => s.id === a.space) ?? { name: a.space_name }, 12, t, ps, true), a.space_name),
-        machine && detailsLine(t, svg("mods/t3-agents/icons/server.svg").size(12).flex_none().text_color(t.muted), machine),
-        branch && detailsLine(t, svg("mods/t3-agents/icons/git-branch.svg").size(12).flex_none().text_color(t.muted), branch),
-        pic && detailsLine(t, div().flex_none().opacity(0.6).child(pic), a.program.name),
-      ], { hide: Boolean(view.hot) }).ml(4)));
-  };
-
   const row = (a, i, subs = [], ghost) => {
     const pic = icon(a.program, 16, t.foreground);
     const more = detail.get(a.address);
@@ -183,9 +179,9 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
     const st = shownStatus(a), on = viewing(a);
     const isPinned = view.pins.includes(a.address);
-    const pinId = `pin-${a.address}`, rowId = `ag-${a.address}`;
+    const rowId = `ag-${a.address}`;
     // Hovered, or with the keyboard on the row or inside it.
-    const offer = !ghost && (view.hovered === a.address || within(view, [rowId, pinId, `fold-${a.address}`]));
+    const offer = !ghost && (view.hovered === a.address || within(view, [rowId, `fold-${a.address}`]));
     // As T3's rows: what you're on or what wants you leads; the rest recede until hovered, a working one fainter still.
     const leads = on || offer || st === "blocked" || st === "done";
     // A row leads with what the agent is on; an automatic tab number says nothing.
@@ -222,7 +218,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
       .when(Boolean(machine), el => el.child(ghost ? server : tipMark(view, t, `machine-${a.address}`, machine, server)))
       .child(h_flex().when(!ghost, el => el.id(`controls-${a.address}`)).flex_none().items_center().gap(4)
         .when(subs.length > 0, el => el.child(fold(a, subs, ghost)))
-        // The time and the pin share one slot, T3's corner, so hovering moves nothing else.
+        // The time in T3's corner.
         .child(ghost ? h_flex().h(24).min_w(32).flex_none().items_center().justify_end().child(time)
           : h_flex().id(`when-${a.address}`).relative().h(24).min_w(32).flex_none().items_center().justify_end()
             .child(time))
@@ -233,17 +229,9 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
       .transition("opacity", MOTION)
       .role("button").accessibility_label(label(a) || a.program?.name || a.address)
       .when(!on, el => el.hover(s => s.bg(t.hover)).active(s => s.bg(t.selected)))
-      .on_hover((over, cx) => {
-        if (over) { view.hovered = a.address; detailsFor(view, a.address, cx); }
-        else if (view.hovered === a.address) { view.hovered = null; detailsFor(view, null, cx); }
-        cx.notify();
-      })
-      .on_mouse_move((e) => detailsAt(view, a.address, e))
-      .on_click((_e, cx) => {
-        // As a T3 tooltip, a click takes its card down until the pointer comes back.
-        detailsFor(view, null, cx);
-        focusAgent(a.address);
-      }), 6);
+      .on_hover(rowHover(view, a.address))
+      .on_mouse_move(rowMoved(view, a.address))
+      .on_click(() => focusAgent(a.address)), 6);
   };
 
   // Groups in list order: spaces (grouped) or priority sections. Agents of a

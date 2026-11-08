@@ -1,7 +1,7 @@
 // An agent with the sub-agents it started, one reading for Inbox cards, the agents list, tabs and pane headers:
 // one stuck anywhere in it needs the person; then its own unread reply; an agent waiting on working sub-agents
 // is still at work.
-// A copy lives in each mod that uses it (scripts/sync.sh), as name.js does.
+// A copy lives in each mod that uses it, as name.js does.
 
 // A turn that failed needs the person as a question does. Programs report it as `error`; agents() has no such
 // word, so it's read from the terminal's own (terminals()).

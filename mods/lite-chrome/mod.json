@@ -1,7 +1,3 @@
 {
-  "place": "none",
-  "cloned_from": {
-    "name": "t3-chrome",
-    "version": "0.1.13"
-  }
+  "place": "none"
 }
