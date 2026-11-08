@@ -64,9 +64,9 @@ const TREE = {
   // LazyVim's <leader><tab> tabs group.
   tab: { label: "+tabs", keys: {
     tab: ["New tab", cmd("tab.new")],
-    // å/Å for ] and [, as in my nvim keymaps.lua (Norwegian layout).
-    "å": ["Next tab", cmd("tab.next")],
-    "Å": ["Previous tab", cmd("tab.prev")],
+    // LazyVim's ] and [ here; on the Norwegian keyboard æ sits where ] is and ø where [ is.
+    "æ": ["Next tab", cmd("tab.next")],
+    "ø": ["Previous tab", cmd("tab.prev")],
     d: ["Close tab", cmd("tab.close")],
     r: ["Rename tab", cmd("tab.rename")],
   } },
