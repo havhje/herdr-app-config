@@ -6,10 +6,8 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { agents, panes, run, hc, theme, settings, props, shared, closeOverlay, notify } from "herdr";
+import { statusReader, urgency, mark, colour, label } from "./agent-status.js";
 
-const RANK = { blocked: 3, done: 2, working: 1, idle: 0 };
-const GLYPH = { working: "●", blocked: "!", done: "✓", idle: "○" };
-const WORD = { blocked: "needs you", done: "finished" };
 const ROW = 30;
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -46,14 +44,14 @@ export default class AgentPick extends View {
       const byAddr = new Map(live.map((a) => [a.address, a]));
       rows = [...log].reverse().map((e) => ({ ...e, key: `${e.address}-${e.at}`, status: e.what, live: byAddr.has(e.address) }));
     } else {
-      // Its latest log entry dates its "needs you" / "finished" while it still is.
-      const last = new Map(log.map((e) => [e.address, e]));
-      rows = live.map((a, i) => ({ at: last.get(a.address)?.what === a.status ? last.get(a.address).at : null, key: a.address, address: a.address, status: a.status, who: a.program?.name ?? a.app ?? "agent", space: a.space_name, tab: a.tab_name, title: a.title ?? "", order: i, live: true }))
-        .sort((x, y) => RANK[y.status] - RANK[x.status] || x.order - y.order);
+      // Its latest log entry dates its "needs you" / "finished" while it still is. Its status as everywhere (agent-status.js).
+      const last = new Map(log.map((e) => [e.address, e])), read = statusReader();
+      rows = live.map((a, i) => [a, read.agent(a.address), i]).map(([a, status, i]) => ({ at: last.get(a.address)?.what === status ? last.get(a.address).at : null, key: a.address, address: a.address, status, who: a.program?.name ?? a.app ?? "agent", space: a.space_name, tab: a.tab_name, title: a.title ?? "", order: i, live: true }))
+        .sort((x, y) => urgency(y.status) - urgency(x.status) || x.order - y.order);
     }
     const words = this.filter.toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return rows;
-    return rows.filter((r) => { const hay = `${r.who} ${r.space} ${r.tab} ${r.title} ${WORD[r.status] ?? r.status}`.toLowerCase(); return words.every((w) => hay.includes(w)); });
+    return rows.filter((r) => { const hay = `${r.who} ${r.space} ${r.tab} ${r.title} ${label(r.status, "row") ?? r.status}`.toLowerCase(); return words.every((w) => hay.includes(w)); });
   }
 
   load(cx, again = false) {
@@ -106,7 +104,6 @@ export default class AgentPick extends View {
     if (this.at >= this.top + fit) this.top = this.at - fit + 1;
     this.top = Math.max(0, Math.min(this.top, Math.max(0, rows.length - fit)));
     const shown = rows.slice(this.top, this.top + fit);
-    const hue = (s) => t[s] ?? t.dim;
 
     const row = (r, i) => {
       const on = this.top + i === this.at;
@@ -114,11 +111,11 @@ export default class AgentPick extends View {
         .when(on, (el) => el.bg(t.selected)).hover((s) => s.bg(t.hover)).cursor_pointer()
         .on_click(() => this.go(r))
         .when(this.mode === "log", (el) => el.child(div().w(84).flex_none().text_color(t.dim).child(when(r.at))))
-        .child(div().w(12).flex_none().text_color(hue(r.status)).child(GLYPH[r.status] ?? "·"))
+        .child(div().w(12).flex_none().child(mark(t, r.status, "row")))
         .child(div().flex_none().max_w(120).truncate().text_color(r.live ? t.foreground : t.dim).child(r.who))
         .child(div().flex_none().max_w(200).truncate().text_color(t.muted).child(`${r.space} › ${r.tab}`))
         .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(r.title))
-        .when(Boolean(WORD[r.status]), (el) => el.child(div().flex_none().text_size(11).text_color(hue(r.status)).child(WORD[r.status] + (this.mode !== "log" && r.at ? ` ${when(r.at)}` : ""))));
+        .when(Boolean(label(r.status, "row")), (el) => el.child(div().flex_none().text_size(11).text_color(colour(t, r.status)).child(label(r.status, "row") + (this.mode !== "log" && r.at ? ` ${when(r.at)}` : ""))));
     };
 
     const empty = this.mode === "log" ? "No status changes yet. They're logged from when this setup started." : "No agents.";

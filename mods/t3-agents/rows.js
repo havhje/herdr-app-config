@@ -4,7 +4,7 @@ import { h_flex } from "gpui-base";
 import { spaces, run, openOverlay } from "herdr";
 import { namer } from "./name.js";
 import { focusAgent } from "./zoom.js";
-import { kidStatus } from "./tree.js";
+import { mark, label, mostUrgent } from "./agent-status.js";
 import { projectMark } from "./project.js";
 import { glow, hoverKept, tip, tipMark, POINTER_WATCH, pointerAt, pointerGone, pointerMoved } from "./tip.js";
 import { stop, within } from "./focus.js";
@@ -13,8 +13,6 @@ import { MOTION, foldArrow } from "./motion.js";
 // T3's one-line row and shelf or folder header, its folders 8 apart and its list's 1px between items (gap-px).
 const ROW = 36, HEAD = 32, HEAD_GAP = 8;
 export const STACK = 1;
-export const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
-export const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", 1: "Idle" };
 
 // The agent's icon from the app's program table: a one-color glyph or a picture.
 function icon(p, size, color) {
@@ -66,9 +64,9 @@ function rowHover(view, key) {
 const rowMoved = (view, key) => (e) => { pointerMoved(e.position); if (view.hovered === key) view.rowBox = e.bounds; };
 
 // `ghost`: drawn for its leaving, without handlers or ids the list uses.
-function agentSubRow(view, t, s, shown, ghost) {
+function agentSubRow(view, t, s, shown, status, ghost) {
   const k = s.t;
-  const st = kidStatus(k, view.listed);
+  const st = status.subAgent(k);
   const pic = icon(k.program, 14, t.foreground);
   const on = k.address === shown;
   const name = k.name || k.template || k.program?.name || k.address;
@@ -94,7 +92,7 @@ function agentSubRow(view, t, s, shown, ghost) {
       .when(Boolean(pic), el => el.child(pic)))
     .child(h_flex().flex_1().min_w(0).overflow_hidden()
       .child(div().min_w(0).truncate().when(on, (el) => el.font_medium()).text_color(on || over ? t.foreground : t.muted).child(name)))
-    .child(agentStatus(view, t, { status: st }, "", ghost ? undefined : `sub-status-${k.address}`));
+    .child(statusMark(view, t, st, "", ghost ? undefined : `sub-status-${k.address}`));
   if (ghost) return base;
   return stop(view, t, rowId, base
     .id(rowId)
@@ -106,29 +104,23 @@ function agentSubRow(view, t, s, shown, ghost) {
     , 6);
 }
 
-export function agentStatus(view, t, a, note = "", id) {
-  const color = t[a.status] ?? t.dim;
-  let mark;
-  if (a.status === "working") mark = svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900);
-  else if (a.status === "blocked") mark = div().size(12).flex_none().rounded(3).bg(t.blocked + "26").text_size(10).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
-  // Idle: a ring; done: a dot. Every mark is 12 wide, as T3's one-line row, flush right, so the column ends where Spaces' git info does.
-  else if (a.status === "idle") mark = div().size(6).mx(3).flex_none().rounded_full().border(1.5).border_color(t.idle ?? t.dim);
-  else mark = div().size(6).mx(3).flex_none().rounded_full().bg(a.status === "done" ? color : t.dim + "00");
-  const label = (SECTION[RANK[a.status]] ?? "Unknown") + note;
+// An agent's status mark (agent-status.js), labelled. Every mark is 12 wide, as T3's one-line row, flush right, so the column ends where Spaces' git info does.
+function statusMark(view, t, word, note = "", id) {
+  const said = label(word) + note;
   const el = h_flex().size(20).flex_none().items_center().justify_end()
-    .role("status").accessibility_label(label).child(mark);
-  return id ? tipMark(view, t, `${id}-mark`, label, el.id(id)) : el;
+    .role("status").accessibility_label(said).child(mark(t, word, "list"));
+  return id ? tipMark(view, t, `${id}-mark`, said, el.id(id)) : el;
 }
 
-export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPriority, own, shownStatus, groups }) {
+export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPriority, status, shownStatus, groups }) {
   const withKids = (a, i) => {
     const subs = agentTree(all, a.address);
     const r = { key: a.address, h: ROW + STACK, el: row(a, i, subs), ghost: () => row(a, i, subs, true) };
     // A sub-agent with no pane of its own isn't in agents(): it's placed by the agent it hangs from, and has no branch to name, as its folder may be another worktree.
-    const sub = (s) => ({ key: `sub-${s.t.address}`, h: ROW + STACK, el: agentSubRow(view, t, s, shown), ghost: () => agentSubRow(view, t, s, shown, true) });
+    const sub = (s) => ({ key: `sub-${s.t.address}`, h: ROW + STACK, el: agentSubRow(view, t, s, shown, status), ghost: () => agentSubRow(view, t, s, shown, status, true) });
     if (!view.isFolded(a.address)) return [r, ...subs.map(sub)];
     // Folded, a sub-agent that needs the person still shows, hung straight from its parent.
-    const stuck = subs.filter((s) => kidStatus(s.t, view.listed) === "blocked");
+    const stuck = subs.filter((s) => status.subAgent(s.t) === "blocked");
     return [r, ...stuck.map((s, j) => sub({ t: s.t, depth: 1, lines: [j === stuck.length - 1 ? "└" : "├"] }))];
   };
 
@@ -190,7 +182,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
     const name = full ? more ?? (a.space_name || label(a)) : more ?? (/^\d+$/.test(label(a)) ? a.program?.name || label(a) : label(a));
     const where = full && more && a.space_name && a.space_name !== more ? a.space_name : null;
     // Its sub-agents' word, when it isn't its own, is marked as theirs.
-    const fromKid = st !== "idle" && st !== own(a);
+    const fromKid = status.fromSubAgent(a.address);
     const when = view.since(a);
     const lead = h_flex().size(16).flex_none().items_center().justify_center().when(Boolean(pic), el => el.child(pic));
     const server = svg("mods/t3-agents/icons/server.svg").size(14).flex_none().text_color(t.dim);
@@ -222,7 +214,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
         .child(ghost ? h_flex().h(24).min_w(32).flex_none().items_center().justify_end().child(time)
           : h_flex().id(`when-${a.address}`).relative().h(24).min_w(32).flex_none().items_center().justify_end()
             .child(time))
-        .child(agentStatus(view, t, { status: st }, fromKid ? " (sub-agent)" : "", ghost ? undefined : `status-${a.address}`)));
+        .child(statusMark(view, t, st, fromKid ? " (sub-agent)" : "", ghost ? undefined : `status-${a.address}`)));
     if (ghost) return base;
     return stop(view, t, rowId, base
       .id(rowId)
@@ -266,8 +258,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
   // Right-click: the space's menu, as in Spaces.
   const folder = (g, open, ghost) => {
     const hiding = open ? [] : g.members.filter((a) => !viewing(a));
-    const top = hiding.map(shownStatus).reduce((m, s) => ((RANK[s] ?? 0) > (RANK[m] ?? 0) ? s : m), null);
-    const dot = top && top !== "idle";
+    const top = mostUrgent(hiding.map(shownStatus)), dot = mark(t, top, "hint");
     const space = spaces().find((s) => s.id === g.space) ?? { name: g.label };
     const base = h_flex()
       .px(10)
@@ -278,7 +269,7 @@ export function agentEntries(view, t, { list, all, shown, ps, now, viewing, byPr
       .rounded(8)
       .child(projectMark(space, 16, t, ps, true))
       .child(div().flex_1().min_w(0).truncate().font_medium().text_color(t.foreground + "e6").child(g.label))
-      .when(Boolean(dot), (el) => el.child(div().size(6).flex_none().rounded_full().bg(t[top]).role("status").accessibility_label(SECTION[RANK[top]])))
+      .when(Boolean(dot), (el) => el.child(dot.role("status").accessibility_label(label(top))))
       .when(hiding.length > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).child(String(hiding.length))))
       .child(chevron(g, open, ghost));
     if (ghost) return base;

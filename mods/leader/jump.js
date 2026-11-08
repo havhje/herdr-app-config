@@ -2,7 +2,8 @@
 // the jumplist (ctrl-o / ctrl-i over tabs you were on), zen mode and killing an agent.
 // lite-tabs records the jumplist and the status log (record.js); this file only reads and moves.
 
-import { agents, panes, spaces, run, shared, setShared, notify, openOverlay, layout } from "herdr";
+import { agents, panes, run, shared, setShared, notify, openOverlay, layout } from "herdr";
+import { needsMeQueue } from "./agent-status.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -35,20 +36,10 @@ export function agentAt(open) {
   return p?.status != null ? p.terminal : null;
 }
 
-// Blocked first (it waits on you), then done; in each, the one waiting longest first.
-export function needsMe() {
-  const since = new Map();
-  for (const e of shared("agents.log") ?? []) since.set(e.address, e.at);
-  const tabAt = new Map(spaces().flatMap((s) => s.tabs ?? []).map((c) => [c.id, c.changed_at ?? 0]));
-  const at = (a) => since.get(a.address) ?? tabAt.get(a.tab) ?? 0;
-  const rank = (a) => (a.status === "blocked" ? 2 : 1);
-  return agents().filter((a) => a.status === "blocked" || a.status === "done").sort((a, b) => rank(b) - rank(a) || at(a) - at(b));
-}
-
 // d = 1: next in the queue, -1: previous. From outside the queue: its first (or last).
 // A done agent turns idle once looked at, so it leaves the queue and the next press goes on to the next one.
 export function nextNeed(d, open) {
-  const q = needsMe();
+  const q = needsMeQueue();
   if (!q.length) return say("Nothing needs you");
   const i = q.findIndex((a) => a.address === agentAt(open));
   const to = i < 0 ? (d > 0 ? q[0] : q.at(-1)) : q[(i + d + q.length) % q.length];

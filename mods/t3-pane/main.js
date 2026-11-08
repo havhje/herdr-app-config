@@ -6,9 +6,9 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, terminals, agents, props, run, theme, home } from "herdr";
+import { panes, props, run, theme, home } from "herdr";
 import { modStatus, namer, programOf } from "./name.js";
-import { notNews, ownStatus, subAgents, treeStatus } from "./tree.js";
+import { statusReader, mark, label } from "./agent-status.js";
 import { tipMark, POINTER_WATCH, pointerAt, pointerGone, pointerMoved } from "./tip.js";
 import { stopsInit, stopsEnd, stop, focusRoot } from "./focus.js";
 
@@ -62,10 +62,9 @@ export default class Pane extends View {
     // Home's default page says nothing of itself: the brand bar's button tells where this is.
     const name = p.mod === "t3-home" ? "" : namer()(p);
     const pic = icon(programOf(p), 14, t.muted);
-    // Its agent with the sub-agents it started (tree.js).
-    const all = terminals();
-    const kids = subAgents(agents(), all)(p.terminal);
-    const st = p.mod ? modStatus(p) : treeStatus(ownStatus(p.status, p.terminal, all), kids);
+    // Its agent status, sub-agents in (agent-status.js); a mod pane says its own.
+    const st = p.mod ? modStatus(p) : statusReader().agent(p.terminal, p.status);
+    const m = mark(t, st, "pane");
     const pane = p.pane;
     // A mark takes the last button's 24px, so it, the × and the tab bar's + share one column: this header's pr(2), the frame's 2 and the block's 8 are the bar's 12.
     const slot = (mark) => div().w(24).flex_none().flex().items_center().justify_center().child(mark);
@@ -89,9 +88,7 @@ export default class Pane extends View {
       .child(div().relative().flex_1().min_w(0).h_full().flex().items_center()
         .child(div().flex_1().min_w(0).truncate().pr(12).text_color(t.dim).child(folder(p.cwd)))
       )
-      .when(st === "working", el => el.child(slot(tipMark(this, t, `ph-mark-${pane}`, "Working", svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))))
-      // The same marks as the agents list and tabs.
-      .when(st === "blocked", el => el.child(slot(tipMark(this, t, `ph-mark-${pane}`, "Needs you", div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(11).font_bold().text_color(t.blocked).flex().items_center().justify_center().accessibility_label("Needs you").child("!")))))
-      .when(st === "done" && !notNews(all.find(k => k.address === p.terminal), p.status, kids), el => el.child(slot(tipMark(this, t, `ph-mark-${pane}`, "Done", div().size(6).flex_none().rounded_full().bg(t.done))))), 8));
+      // The agents list's marks; idle draws none.
+      .when(Boolean(m), el => el.child(slot(tipMark(this, t, `ph-mark-${pane}`, label(st), m.accessibility_label(label(st)))))), 8));
   }
 }

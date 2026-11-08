@@ -1,14 +1,14 @@
-// Agents in grouped or priority views; a parent reads with its sub-agents (tree.js).
+// Agents in grouped or priority views; a parent reads with its sub-agents (agent-status.js).
 // A viewed done agent stays in Done until left.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, spaces, focused, theme, shared, setShared, setAgentOrder, nextCommand, run } from "herdr";
-import { notNews, ownStatus, subAgents, treeStatus } from "./tree.js";
+import { statusReader, urgency, label } from "./agent-status.js";
 import { stopsInit, stopsEnd, focusRoot, enter, onStop } from "./focus.js";
 import { focusAgent } from "./zoom.js";
 import { planMotion, flying, leavingRows } from "./motion.js";
-import { agentEntries, agentStatus, STACK, RANK, SECTION } from "./rows.js";
+import { agentEntries, STACK } from "./rows.js";
 // <leader>ag flips shared "agents.sort" between these.
 const SORTS = [{ id: "priority" }, { id: "grouped" }];
 const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[0];
@@ -94,24 +94,22 @@ export default class Agents extends View {
     const cur = list.find((a) => a.focused);
     const same = cur && cur.address === this.held?.address;
     // Arriving, or any change but done turning idle, sets what it was.
-    if (!same || cur.status !== "idle") this.held = cur ? { address: cur.address, rank: RANK[cur.status] ?? 0 } : null;
+    if (!same || cur.status !== "idle") this.held = cur ? { address: cur.address, word: cur.status } : null;
   }
 
   word(a) {
-    const sawDone = a.address === this.held?.address && this.held.rank === RANK.done && a.status === "idle";
+    const sawDone = a.address === this.held?.address && this.held.word === "done" && a.status === "idle";
     return sawDone ? "done" : a.status;
-  }
-
-  status(t, a, note = "", id) {
-    return agentStatus(this, t, a, note, id);
   }
 
   compute() {
     const sort = sortOf();
+    // Every agent's status, sub-agents in (agent-status.js).
+    const status = statusReader();
     // <leader>ai hides idle agents (shared "agents.hideIdle"); the one you're on and pinned ones stay.
     let list = agents();
-    if (shared("agents.hideIdle")) list = list.filter((a) => a.status !== "idle" || a.focused || this.pins.includes(a.address));
-    this.listed = new Map(list.map((a) => [a.address, a.status]));
+    if (shared("agents.hideIdle")) list = list.filter((a) => status.agent(a.address) !== "idle" || a.focused || this.pins.includes(a.address));
+    this.listed = new Set(list.map((a) => a.address));
     const all = terminals();
     // A mod pane has no agent of its own, and Herdr's is then the chosen one, else the first of all: it counts only in that tab, as in the inbox.
     const f = focused();
@@ -129,14 +127,10 @@ export default class Agents extends View {
     this.track(list, now);
     this.hold(list);
     const byPriority = sort.id === "priority";
-    const under = subAgents(list, all);
-    const kidsOf = new Map(list.map((a) => [a.address, under(a.address)]));
-    // As shown: its own word with its sub-agents'. Sorted, a viewed done agent keeps Done.
-    const own = (a) => ownStatus(a.status, a.address, all);
-    const shownStatus = (a) => notNews(all.find(k => k.address === a.address), own(a), kidsOf.get(a.address))
-      && treeStatus(own(a), kidsOf.get(a.address)) !== "blocked" ? "idle" : treeStatus(own(a), kidsOf.get(a.address));
-    const urgency = new Map(list.map((a) => [a.address, RANK[treeStatus(ownStatus(this.word(a), a.address, all), kidsOf.get(a.address))] ?? 0]));
-    const rankOf = (a) => urgency.get(a.address);
+    // As shown: its agent status. Sorted, a viewed done agent keeps Done until left.
+    const shownStatus = (a) => status.agent(a.address);
+    const sorted = new Map(list.map((a) => [a.address, status.agent(a.address, this.word(a)) ?? "idle"]));
+    const rankOf = (a) => urgency(sorted.get(a.address));
     if (byPriority) list = [...list].sort((x, y) => rankOf(y) - rankOf(x) || this.since(y) - this.since(x) || y.seq - x.seq);
     this.prune(all);
     const pinned = this.pins.map((p) => list.find((a) => a.address === p)).filter(Boolean);
@@ -144,10 +138,9 @@ export default class Agents extends View {
     list = [...pinned, ...rest];
     const groups = pinned.length ? [{ id: "pinned", label: "Pinned", status: null, members: pinned }] : [];
     for (const a of rest) {
-      const r = rankOf(a) || RANK.idle;
-      const id = byPriority ? `sec-${r}` : `sp-${a.space}`;
+      const id = byPriority ? `sec-${rankOf(a)}` : `sp-${a.space}`;
       if (groups.at(-1)?.id === id) groups.at(-1).members.push(a);
-      else groups.push({ id, label: byPriority ? SECTION[r] : a.space_name || "", space: byPriority ? null : a.space, members: [a] });
+      else groups.push({ id, label: byPriority ? label(sorted.get(a.address)) : a.space_name || "", space: byPriority ? null : a.space, members: [a] });
     }
     // Every top-level agent, in its group or not. A sub-agent with no pane can only open as a peek, a popup over the work. A folded group
     // counts: Idle folds by default, and leaving a row there would take it off the walk, with no key back.
@@ -161,7 +154,7 @@ export default class Agents extends View {
       this.agentOrder = key;
       setAgentOrder(addresses);
     }
-    return { sort, list, all, shown, ps, now, viewing, byPriority, own, shownStatus, pinned, groups };
+    return { sort, list, all, shown, ps, now, viewing, byPriority, status, shownStatus, pinned, groups };
   }
 
   // nvim keys on the list: j/k (and arrows) move between agents, gg/G ends, l/enter/right go to the agent's

@@ -154,6 +154,25 @@ function start(build) {
     ok("<leader>å: says \"Nothing needs you\" with none, \"Only this one needs you\" when on the only one");
   }
 
+  {
+    // The queue reads agent status as everywhere else (lib/agent-status.js, #11): an agent whose sub-agent is stuck
+    // is blocked and in it; a done agent put away (settled) isn't news and isn't.
+    const m = start((h) => {
+      h.addSpace({ id: "s1", name: "alpha", tabs: [{ id: "b1" }, { id: "b2" }, { id: "b3" }] });
+      h.addPane({ pane: "p1", tab: "b1", terminal: "t1", status: "working" });
+      h.addSubAgent({ address: "k1", parent: "t1", status: "blocked" });
+      h.addPane({ pane: "p2", tab: "b2", terminal: "t2", status: "done" });
+      h.addPane({ pane: "p3", tab: "b3" });
+    });
+    Object.assign(m.terminal("t2"), { turn: 3, labels: { settled: "x:3" } });
+    m.focusPane("p3"); land(m);
+    await leaderKey(m, "å");
+    assert.equal(at(m), "p1");
+    await leaderKey(m, "å");
+    assert.equal(lastNote(m), "Only this one needs you");
+    ok("needs-me queue: an agent with a stuck sub-agent is in it; a settled done one isn't");
+  }
+
   noSpawnErrors();
   console.log("leader-jump: all passed");
 })().catch((e) => { console.error(e); process.exit(1); });
