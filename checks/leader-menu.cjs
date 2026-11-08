@@ -29,7 +29,6 @@ const shown = (h) => {
     "o Jump back",
     "SPC Find agent",
     "? Key help",
-    "` Other buffer",
     "a +agents",
     "b +buffer",
     "g +git",

@@ -34,7 +34,6 @@ const TREE = {
   " ": ["Find agent", () => pick("agents")],
   n: ["Status log", () => pick("log")],
   "?": ["Key help", cmd("app.help")],
-  "`": ["Other buffer", otherBuffer],
   o: ["Jump back", () => jumpBy(-1)],
   i: ["Jump forward", () => jumpBy(1)],
   "å": { label: "+next", keys: {
