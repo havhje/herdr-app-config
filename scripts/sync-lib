@@ -1,0 +1,39 @@
+#!/usr/bin/env node
+// Copies each lib/<file> into every mod lib/uses.json lists it for. Herdr won't import outside a mod's folder.
+// --check: change nothing, exit 1 if a copy is missing, differs from lib/, or is a generated copy no mod lists.
+import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const check = process.argv.includes("--check");
+const uses = JSON.parse(readFileSync(join(root, "lib/uses.json"), "utf8"));
+const header = (file) => `// Generated from lib/${file} by scripts/sync-lib. Edit lib/, not this copy.\n`;
+const wanted = new Set();
+let bad = 0;
+
+for (const [mod, files] of Object.entries(uses)) {
+  if (!existsSync(join(root, "mods", mod))) { console.error(`missing mod: mods/${mod}`); bad++; continue; }
+  for (const file of files) {
+    const to = join("mods", mod, file);
+    wanted.add(to);
+    const want = header(file) + readFileSync(join(root, "lib", file), "utf8");
+    const have = existsSync(join(root, to)) ? readFileSync(join(root, to), "utf8") : null;
+    if (have === want) continue;
+    if (check) { console.error(`${have === null ? "missing" : "differs from lib/" + file}: ${to}`); bad++; }
+    else { writeFileSync(join(root, to), want); console.log(`wrote ${to}`); }
+  }
+}
+
+// A generated copy no mod lists any more (dropped from uses.json): say so, never delete.
+for (const mod of readdirSync(join(root, "mods"), { withFileTypes: true }).filter((d) => d.isDirectory())) {
+  for (const file of readdirSync(join(root, "mods", mod.name)).filter((f) => f.endsWith(".js"))) {
+    const at = join("mods", mod.name, file);
+    if (wanted.has(at) || !readFileSync(join(root, at), "utf8").startsWith("// Generated from lib/")) continue;
+    console.error(`not in lib/uses.json: ${at}`);
+    bad++;
+  }
+}
+
+if (bad) process.exit(1);
+if (check) console.log("lib copies match");

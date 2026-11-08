@@ -1,3 +1,4 @@
+// Generated from lib/project.js by scripts/sync-lib. Edit lib/, not this copy.
 // A space's mark, as T3 Code's sidebar draws a project (ProjectFavicon): the project's own icon when it has
 // one, else a two-letter monogram tinted with a color its name picks.
 import { image, svg } from "gpui-kit";
@@ -24,7 +25,7 @@ function monogram(name) {
 }
 
 // As T3: the name, folded, hashed into the palette, so a name has one color everywhere.
-export function tint(name, dark) {
+function tint(name, dark) {
   const seed = name.normalize("NFKC").trim().toLocaleLowerCase("en-US") || "project";
   let i = 0;
   for (const g of seed) i = (i * 31 + g.codePointAt(0)) % PALETTE.length;
@@ -101,7 +102,7 @@ async function lookUp(on, dir) {
 }
 
 // Where a space is now: its first terminal's live folder, else where it was made.
-export function placeOf(s, ps) {
+function placeOf(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps?.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }

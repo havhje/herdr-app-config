@@ -1,4 +1,5 @@
-// A list's motion and a fold's arrow, as T3's Sidebar.motion.ts. A copy lives in each mod that uses it.
+// Generated from lib/motion.js by scripts/sync-lib. Edit lib/, not this copy.
+// A list's motion and a fold's arrow, as T3's Sidebar.motion.ts.
 import { div, svg } from "gpui-kit";
 
 export const MOTION = { duration: 150, easing: "ease-out" };
@@ -14,14 +15,13 @@ export function foldArrow(mod, id, open, size, color) {
 // `entries`: the list's rows in order, each { key, h, y?, ghost? }: `y` where they don't just stack, ghost() to draw a row's leaving
 // without handlers or ids the list uses (none: it just goes).
 // When the rows change, one that moved slides from where it was, a new one fades in riding the kept row above it, and one
-// that left fades out riding the same way. Over 40 coming and going, they just show. `freeze` records the rows without playing
-// anything (a drag draws its own); `from` lands a dropped row from where it was let go: { key, y }.
+// that left fades out riding the same way. Over 40 coming and going, they just show.
 // Herdr eases only later changes to an element: a row that moves gets a new id, first drawn where it was, then let go.
-export function planMotion(view, entries, cx, { freeze, from } = {}) {
+export function planMotion(view, entries, cx) {
   let y = 0;
   const at = new Map(entries.map((e) => { const top = e.y ?? y; y = top + e.h; return [e.key, { ...e, y: top }]; }));
   const sig = [...at.keys()].join("\n"), m = view.motion;
-  if (!m || sig === m.sig || freeze) {
+  if (!m || sig === m.sig) {
     view.motion = { gen: {}, fly: {}, exits: [], step: 0, leaving: false, ...m, sig, at };
     return;
   }
@@ -35,7 +35,7 @@ export function planMotion(view, entries, cx, { freeze, from } = {}) {
   const fly = {}, gen = m.gen;
   let riding;
   for (const [k, v] of at) {
-    const was = from?.key === k ? from.y : m.at.get(k)?.y;
+    const was = m.at.get(k)?.y;
     if (was === undefined) {
       gen[k] = (gen[k] ?? 0) + 1;
       fly[k] = { top: riding ?? -Math.min(v.h, 40), fade: true };

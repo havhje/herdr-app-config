@@ -11,6 +11,8 @@
 !/CLAUDE.md
 !/GLOSSARY.md
 !/docs/
+!/lib/
+!/scripts/
 # Shipped mods: Herdr replaces them whole on start. Clone before editing.
 /mods/agents/
 /mods/changes/

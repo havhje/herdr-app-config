@@ -1,26 +1,8 @@
-// A hover label as T3's (its ui/tooltip.tsx): small and dark, the label with its key, and under it a dim hint if there is one.
-// `.tooltip()` takes only a string, in the shell's own style, hence this. A copy lives in each mod that uses it.
+// Generated from lib/tip.js by scripts/sync-lib. Edit lib/, not this copy.
+// A hover label as T3's (its ui/tooltip.tsx): small and dark, above its control.
+// `.tooltip()` takes only a string, in the shell's own style, hence this.
 import { div } from "gpui-kit";
 import { v_flex, Popup } from "gpui-base";
-import { keys, window } from "herdr";
-
-// An action's key as the new menu writes it: ⇧⌘O. Read from the bindings, so a rebound key says so.
-export function keyOf(action) {
-  const k = keys().find(b => b.action === action);
-  if (!k?.keys.trim()) return "";
-  const mac = window()?.platform === "macos";
-  const names = mac ? { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘", fn: "fn" } : { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Super", fn: "Fn" };
-  const alias = { secondary: mac ? "cmd" : "ctrl", super: "cmd", win: "cmd" };
-  return k.keys.trim().split(/\s+/).map(stroke => {
-    const parts = stroke.split("-");
-    let key = parts.pop();
-    if (key === "") { key = "-"; parts.pop(); }
-    const held = new Set(parts.map(m => alias[m.toLowerCase()] ?? m.toLowerCase()));
-    if (/^[A-Z]$/.test(key)) held.add("shift");
-    const label = key.length === 1 ? key.toUpperCase() : key[0].toUpperCase() + key.slice(1).toLowerCase();
-    return [...Object.keys(names).filter(m => held.has(m)).map(m => names[m]), label].join(mac ? "" : "+");
-  }).join(" ");
-}
 
 // Herdr drops a leave while the pointer's last known place is in the element's last box (should_dispatch_hover), and GPUI has by then marked it left,
 // so none comes after: the pointer leaving the window, a key press or a press dragged out strand a hover. So what shows on hover also watches where the
@@ -47,13 +29,10 @@ export function pointerGone(box, from) {
   return Boolean(p) && !(p.x >= box.x && p.x < box.x + box.width && p.y >= box.y && p.y < box.y + box.height);
 }
 
-// A drag has a release to wait for, and one out of an inactive window's sight never comes.
-export const dragGone = (box) => window()?.active === false || pointerGone(box);
-
 // The label fades and slides 4px off its control, in and out: T3's also scales, which Herdr can't. A transition adopts the first value it sees,
 // so it draws clear until laid out. A new id per opening: a size reports only the first time an id is laid out.
 // A Popup, as a HoverCard stays open under the pointer and a popup blocks what it covers even when clear: one fading out would leave a dead patch.
-const tips = new Map(), FADE = { duration: 150, easing: "ease-out" };
+const tips = new Map(), FADE = { duration: 150, easing: "ease-out" }, DELAY = 150;
 let opened = 0;
 
 function dropTip(id, s) {
@@ -70,10 +49,9 @@ function leaveTip(id, s, cx) {
   s.timer = cx.timer.after(FADE.duration, (cx) => { dropTip(id, s); cx.notify(); });
 }
 
-// Above, as T3's. `below` for what has no room up there: a Popup doesn't flip as T3's does, it is pushed back over its trigger.
-// `off`: not lit whatever the pointer's on, as under the control's own menu.
-export function tip(view, t, id, label, trigger, { action, hint, below, delay = 150, off } = {}) {
-  const key = action ? keyOf(action) : "", hot = off ? null : view.hot, s = tips.get(id), shown = hot === id && s?.drawn;
+// Above, as T3's: a Popup doesn't flip as T3's does, it is pushed back over its trigger.
+export function tip(view, t, id, label, trigger) {
+  const hot = view.hot, s = tips.get(id), shown = hot === id && s?.drawn;
   const watch = (s, cx) => {
     s.watch = cx.timer.every(POINTER_WATCH, (cx) => {
       if (!pointerGone(s.box, s.from)) return;
@@ -93,16 +71,15 @@ export function tip(view, t, id, label, trigger, { action, hint, below, delay = 
     if (was) dropTip(id, was);
     const next = { n: ++opened, from: pointerAt() };
     tips.set(id, next);
-    next.timer = cx.timer.after(delay, (cx) => { next.open = true; cx.notify(); });
+    next.timer = cx.timer.after(DELAY, (cx) => { next.open = true; cx.notify(); });
     watch(next, cx);
   };
-  return Popup.new(`tip-${id}`, div().id(`tip-over-${id}`).on_hover(hover).on_mouse_move((e) => { pointerMoved(e.position); const at = tips.get(id); if (at) at.box = e.bounds; }).child(trigger)).anchor(below ? "top_center" : "bottom_center")
+  return Popup.new(`tip-${id}`, div().id(`tip-over-${id}`).on_hover(hover).on_mouse_move((e) => { pointerMoved(e.position); const at = tips.get(id); if (at) at.box = e.bounds; }).child(trigger)).anchor("bottom_center")
     // While lit or leaving: a dialog opened from the button covers it, nothing reports the leaving until the pointer moves, and the label would stay up over it.
     .when(Boolean(s?.open && (hot === id || s.closing)), pop => pop.content(v_flex().id(`tip-body-${id}-${s.n}`)
-      .opacity(shown ? 1 : 0).top(shown ? 0 : below ? -4 : 4).transition("opacity", FADE).transition("top", FADE)
-      .on_size_change((_size, cx) => { if (tips.get(id) !== s || s.drawn) return; s.drawn = true; cx.notify(); }).when(below, el => el.mt(4)).when(!below, el => el.mb(4)).max_w(320).px(8).py(4).gap(2).rounded(6).border(1).border_color(t.border).bg(t.chrome).shadow_md().text_size(12).line_height(1.375).text_color(t.foreground)
-      .child(div().child(key ? `${label} (${key})` : label))
-      .when(Boolean(hint), el => el.child(div().text_color(t.muted).child(hint)))));
+      .opacity(shown ? 1 : 0).top(shown ? 0 : 4).transition("opacity", FADE).transition("top", FADE)
+      .on_size_change((_size, cx) => { if (tips.get(id) !== s || s.drawn) return; s.drawn = true; cx.notify(); }).mb(4).max_w(320).px(8).py(4).gap(2).rounded(6).border(1).border_color(t.border).bg(t.chrome).shadow_md().text_size(12).line_height(1.375).text_color(t.foreground)
+      .child(div().child(label))));
 }
 
 // A button's icon and text brighten together: a hover style reaches the text but not the svg, so it's state.
@@ -131,8 +108,8 @@ export function hoverKept(view, key, id, el) {
 }
 
 // A mark with no words of its own (a status, a machine) says what it is on hover too, lit only to show its label.
-export function tipMark(view, t, id, label, mark, options) {
+export function tipMark(view, t, id, label, mark) {
   if (!label) return mark;
   const lit = div().id(id).flex_none().on_hover(glow(view, id)).child(mark);
-  return tip(view, t, id, label, lit, options);
+  return tip(view, t, id, label, lit);
 }

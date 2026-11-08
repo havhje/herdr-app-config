@@ -1,7 +1,7 @@
+// Generated from lib/tree.js by scripts/sync-lib. Edit lib/, not this copy.
 // An agent with the sub-agents it started, one reading for Inbox cards, the agents list, tabs and pane headers:
 // one stuck anywhere in it needs the person; then its own unread reply; an agent waiting on working sub-agents
 // is still at work.
-// A copy lives in each mod that uses it, as name.js does.
 
 // A turn that failed needs the person as a question does. Programs report it as `error`; agents() has no such
 // word, so it's read from the terminal's own (terminals()).
@@ -15,7 +15,7 @@ export const kidStatus = (k, listed) => {
 };
 
 // Live sub-agents of `addr`, all the way down.
-export function descendants(all, addr) {
+function descendants(all, addr) {
   return all.filter((k) => k.parent === addr && k.state === "live").flatMap((k) => [k, ...descendants(all, k.address)]);
 }
 
@@ -29,7 +29,7 @@ export function treeStatus(own, kids) {
 
 // A settled agent stays settled until new work: busy now, or a turn ended since. Label removal can still be in flight,
 // or the Inbox not started, so the label alone isn't enough. `k` is its terminal.
-export function stillSettled(k, word, kids) {
+function stillSettled(k, word, kids) {
   const label = k?.labels?.settled;
   if (!label) return false;
   const busy = (s) => s === "working" || s === "blocked";
