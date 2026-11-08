@@ -4,7 +4,6 @@
 !/settings.json
 !/keys.json
 !/programs.json
-!/themes/
 !/layouts/
 !/mods/
 !/backgrounds/
@@ -43,10 +42,8 @@ jsconfig.json
 gpui-kit.d.ts
 # Window state the app writes as you use it (panel sizes, shown/hidden rows).
 /layouts/.state/
-# Shipped layouts and themes: Herdr rewrites them on start; only herdr_vim and omarchy are mine.
+# Shipped layouts: Herdr rewrites them on start; only herdr_vim is mine. Themes aren't tracked: they change on their own.
 /layouts/main.json
 /layouts/terminals.json
 /layouts/win98.json
 /layouts/win98.svg
-/themes/win98.json
-/themes/atom-one-dark.json
