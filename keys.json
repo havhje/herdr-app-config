@@ -9,10 +9,10 @@
     "alt-7": "space.select:7",
     "alt-8": "space.select:8",
     "alt-9": "space.select:9",
-    "alt-h": "pane.go:left",
-    "alt-j": "pane.go:down",
-    "alt-k": "pane.go:up",
-    "alt-l": "pane.go:right",
+    "ctrl-h": "pane.go:left",
+    "ctrl-j": "pane.go:down",
+    "ctrl-k": "pane.go:up",
+    "ctrl-l": "pane.go:right",
     "alt-left": "pane.go:left",
     "alt-right": "pane.go:right",
     "alt-shift-h": "pane.swap:left",
@@ -59,8 +59,6 @@
     "ctrl-shift-l": "layout.switch",
     "f2": "tab.rename",
     "shift-f2": "space.rename",
-    "ctrl-h": "pane.go:left",
-    "ctrl-l": "pane.go:right",
     "ctrl-space": "bufferline.leader"
   },
   "terminal": {
