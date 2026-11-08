@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+// One command that says the config still works. Exits 1 if any step fails; runs every step either way.
+//   1. herdr-app check, for every tracked mod
+//   2. scripts/sync-lib --check (lib/ copies match)
+//   3. every tracked JSON file parses, and Herdr left no *.error in the root
+//   4. node checks/*.cjs (behaviour checks, against the fake Herdr in checks/fake-herdr.cjs)
+import { spawnSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const sh = (cmd, args) => spawnSync(cmd, args, { cwd: root, encoding: "utf8" });
+const git = (...args) => sh("git", args).stdout.split("\n").filter(Boolean);
+let failed = 0;
+
+function step(name, problems) {
+  if (problems.length) { failed++; console.log(`FAIL ${name}`); for (const p of problems) console.log(p.replace(/^/gm, "    ")); }
+  else console.log(`ok   ${name}`);
+}
+// A command's own words when it fails; its output's last lines, enough to see why.
+const why = (r) => (r.error ? String(r.error) : `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").slice(-15).join("\n"));
+
+// 1
+const mods = git("ls-files", "mods/*/mod.json").map(dirname);
+step(`herdr-app check (${mods.length} mods)`, mods.flatMap((m) => {
+  const r = sh("herdr-app", ["check", m]);
+  return r.status === 0 ? [] : [`${m}:\n${why(r)}`];
+}));
+
+// 2
+{
+  const r = sh(process.execPath, [join(root, "scripts/sync-lib"), "--check"]);
+  step("sync-lib --check", r.status === 0 ? [] : [why(r)]);
+}
+
+// 3
+{
+  const json = git("ls-files", "*.json");
+  const bad = json.flatMap((f) => { try { JSON.parse(readFileSync(join(root, f), "utf8")); return []; } catch (e) { return [`${f}: ${e.message}`]; } });
+  const errors = readdirSync(root).filter((f) => f.endsWith(".error")).map((f) => `${f}: ${readFileSync(join(root, f), "utf8").trim()}`);
+  step(`JSON parses (${json.length} files), no *.error`, [...bad, ...errors]);
+}
+
+// 4
+{
+  const checks = readdirSync(join(root, "checks")).filter((f) => f.endsWith(".cjs") && f !== "fake-herdr.cjs").sort();
+  for (const c of checks) {
+    const r = sh(process.execPath, [join(root, "checks", c)]);
+    // Where it got to, then why it stopped.
+    const got = r.stdout.trim().split("\n").filter((l) => l.trim().startsWith("ok")).at(-1);
+    step(`checks/${c}`, r.status === 0 ? [] : [`${got ? `last passed: ${got.trim()}\n` : ""}${(r.stderr || String(r.error)).trim().split("\n").slice(0, 20).join("\n")}`]);
+  }
+}
+
+console.log(failed ? `check: ${failed} step(s) failed` : "check: all passed");
+process.exit(failed ? 1 : 0);
