@@ -85,7 +85,7 @@ Every agent in the sidebar, grouped by buffer or by status, pinned agents first.
 _Avoid_: inbox, agents panel
 
 **Context pane**:
-The pane shown in the agents list's place with what is in the last focused agent's context and what each part costs in tokens: the conversation, system prompt, tools, MCP, instructions, then the skills, loaded ones first (the whole skill is in the context), then the ones only described to the model; `<leader>ac`. Claude Code agents only so far.
+The pane shown in the agents list's place with what is in the last focused agent's context and what each part costs in tokens, as a tree by what can be done about it, the dearest first at every level: Claude Code's own (tools, system prompt, agent types, session notes), my setup (skills, instructions, MCP by server), and last the conversation. Skills are split by who starts them: automatic (the agent is given the description and may load the skill itself), manual (only I run it, by `/name`) and off; a loaded one has its whole body in the context. `<leader>ac`. Claude Code agents only so far.
 _Avoid_: skills pane (its first name), context panel, resource explorer (the pi extension it replaces in the Herdr app)
 
 **Sidebar footer**:

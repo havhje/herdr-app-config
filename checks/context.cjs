@@ -1,8 +1,9 @@
-// The context pane (mods/context): what is in the focused Claude Code agent's context and what each part costs. From
-// its session's transcript: the parts (system prompt, tools, MCP, instructions, agent types, session notes), the
-// skills loaded and the ones only described, their tokens, and the conversation as the rest of the real context; from
-// disk the skills' files and the ones the model does not see. Parts unfold (all folded at first); follows the last focused agent; enter
-// opens a row's file. And <leader>ac / <leader>aa in the sidebar.
+// The context pane (mods/context): what is in the focused Claude Code agent's context and what each part costs, as a
+// tree: my setup (skills by who starts them: automatic, manual, off; instructions; MCP by server), Claude Code's own
+// (tools, system prompt, agent types, session notes) and last the conversation, the rest of the real context. From
+// its session's transcript and, for the skills' files and the ones the model does not see, from disk. The dearest
+// first at every level; parts unfold; follows the last focused agent; the explorer's keys; enter opens a row's file.
+// And <leader>ac / <leader>aa in the sidebar.
 const assert = require("node:assert/strict");
 const { fakeHerdr, noSpawnErrors, MODS, find, fire, strings, plain } = require("./fake-herdr.cjs");
 
@@ -55,7 +56,7 @@ const USER = "/home/me/.claude/skills";
   const reads = () => h.world.execs.filter(([c]) => c === "sh");
   // The list as drawn: "== part count" and, under an unfolded part, "name" or "name [note]"; with `true`, the tokens too ("name ~12", "== part count ~sum").
   const listed = async (costs = false) => (find(await draw(), "context-list").items.map((r) => {
-    const s = strings(r).filter((x) => x && !/^[▸▾]$/.test(x)), cost = s.find((x, i) => i && /^~/.test(x)), note = s.slice(1).find((x) => !/^~/.test(x));
+    const s = strings(r).filter((x) => x && !/^[▸▾]$|%$/.test(x)), cost = s.find((x, i) => i && /^~/.test(x)), note = s.slice(1).find((x) => !/^~/.test(x));
     return r.id.startsWith("context-h-") ? `== ${s[0]}${note ? ` ${note}` : ""}${costs && cost ? ` ${cost}` : ""}` : `${s[0]}${note ? ` [${note}]` : ""}${costs && cost ? ` ${cost}` : ""}`;
   }));
   const told = async () => strings(find(await draw(), "context-about"));
@@ -66,22 +67,28 @@ const USER = "/home/me/.claude/skills";
   ok("the agents list shown: reads nothing (Herdr keeps a hidden copy alive)");
 
   node("sidebar-body").active = "context";
-  assert.deepEqual(await listed(true), ["== Skills the model sees 5 ~30", "== Skills only you run (/name) 2"]);
+  // The cursor on a line, by its id (the keys down to it).
+  const at = async (id) => { pane.view.cursor = id; await draw(); };
+  // The rows drawn under a part's line.
+  const under = async (label) => { const l = await listed(true), i = l.findIndex((x) => x.startsWith(`== ${label}`)), end = l.findIndex((x, j) => j > i && x.startsWith("== ")); return l.slice(i + 1, end < 0 ? l.length : end); };
+  assert.deepEqual(await listed(true), ["== Your setup 7 ~30", "== Skills 7 ~30", "== Automatic 5 ~30", "== Manual (/name) 2"]);
+  await at("setup/skills/auto");
   await press("enter");
   assert.deepEqual(await listed(true), [
-    "== Skills the model sees 5 ~30", "tdd ~13", "gone ~6", "deploy [repo] ~5", "no-header ~4", "quiet [name only] ~2",
-    "== Skills only you run (/name) 2",
+    "== Your setup 7 ~30", "== Skills 7 ~30",
+    "== Automatic 5 ~30", "tdd ~13", "gone ~6", "deploy [repo] ~5", "no-header ~4", "quiet [name only] ~2",
+    "== Manual (/name) 2",
   ]);
   assert.deepEqual(strings(find(await draw(), "context-sum")), ["~30 tokens", "no session found: loaded unknown"]);
-  ok("no session found: the disk's skills, a folded line per kind; the ones the model sees with their descriptions' tokens (characters / 4), dearest first; the header's and the settings' say (local, then repo, then mine) decide");
+  ok("no session found: the disk's skills under my setup, split by who starts them: automatic ones with their descriptions' tokens (characters / 4), dearest first, and manual ones; the header's and the settings' say (local, then repo, then mine) decide");
   assert.deepEqual(plain(reads().map(([, a, o]) => [a[3], a[4], o])), [["/work/alpha/src", "t1", {}]]);
   await draw();
   assert.equal(reads().length, 1);
   ok("one read for the agent's folder and terminal, on its machine; drawing again reads nothing");
 
-  assert.ok(strings(find(await draw(), "context-h-you")).includes("▸") && strings(find(await draw(), "context-h-model")).includes("▾"));
+  assert.ok(strings(find(await draw(), "context-h-setup/skills/manual")).includes("▸") && strings(find(await draw(), "context-h-setup/skills/auto")).includes("▾"));
   await press("G", "enter");
-  assert.deepEqual((await listed()).slice(-3), ["== Skills only you run (/name) 2", "brandkit", "grill-me"]);
+  assert.deepEqual((await listed()).slice(-3), ["== Manual (/name) 2", "brandkit", "grill-me"]);
   ok("enter on a folded part's line unfolds it");
   await press("G");
   assert.ok((await told()).includes("Grill the user"));
@@ -89,8 +96,8 @@ const USER = "/home/me/.claude/skills";
   assert.ok((await told()).includes("Brand rules, folded over lines."), (await told()).join(" | "));
   assert.ok((await told()).includes("~/.claude/skills/brandkit/SKILL.md") && (await told()).includes("not in the context"), (await told()).join(" | "));
   await press("g", "g");
-  assert.ok((await told()).includes("~30 tokens · 5 rows"), (await told()).join(" | "));
-  await press("j");
+  assert.ok((await told()).includes("~30 tokens · 7 rows"), (await told()).join(" | "));
+  await press("j", "j", "j");
   assert.ok((await told()).includes("Test-driven development. Use it: test-first."));
   assert.ok((await told()).includes("description ~13 · not loaded"));
   ok("j/k, gg/G move over parts and rows; the line's description, tokens and file show under the list; my skill wins over the repo's of the same name");
@@ -110,12 +117,12 @@ const USER = "/home/me/.claude/skills";
 
   h.world.execs.length = 0;
   h.focusPane("p2");
-  const beta = ["== Skills the model sees 3", "tdd", "no-header", "quiet [name only]", "== Skills only you run (/name) 2", "brandkit", "grill-me", "== Skills off 1"];
+  const beta = ["== Your setup 6", "== Skills 6", "== Automatic 3", "tdd", "no-header", "quiet [name only]", "== Manual (/name) 2", "brandkit", "grill-me", "== Off 1"];
   assert.deepEqual(await listed(), beta);
-  assert.deepEqual(plain(reads().map(([, a]) => a[3])), ["/work/beta"]);
+  assert.deepEqual(plain(reads().map(([, a]) => [a[3], a[4]])), [["/work/beta", "t2"]]);
   h.focusPane("px");
   assert.deepEqual(await listed(), beta);
-  ok("follows the focused agent; with a mod focused, keeps the last agent; skills switched off are the last part, folded");
+  ok("follows the focused agent; with a mod focused, keeps the last agent; skills switched off are the last kind, folded");
 
   h.world.execs.length = 0;
   h.focusPane("p3");
@@ -129,7 +136,7 @@ const USER = "/home/me/.claude/skills";
     h.addPane({ pane: "p4", tab: "b1", terminal: "t4", status: "idle", cwd: "/work/many" });
     h.focusPane("p4");
     const first = await listed();
-    assert.ok(first.length < 30 && first[1] === "s00", first.join(","));
+    assert.ok(first.length < 30 && first[3] === "s00", first.join(","));
     await press("G");
     assert.equal((await listed()).at(-1), "s59");
     ok("a long list: draws what fits, moved to keep the cursor's line in view");
@@ -141,39 +148,44 @@ const USER = "/home/me/.claude/skills";
     assert.ok((await told()).includes("Skill 59."), (await told()).join(" | "));
     ok("ctrl-u and ctrl-d move half a page, stopping at the ends");
     await press("h");
-    assert.ok((await told()).some((x) => x.endsWith("60 rows")), (await told()).join(" | "));
+    assert.ok((await told()).some((x) => x.endsWith("60 rows")) && (await told()).some((x) => x.startsWith("Skills the agent may load by itself")), (await told()).join(" | "));
     await press("l");
     assert.ok((await told()).includes("Skill 0."), (await told()).join(" | "));
     ok("h on a row goes to its part's line; l on an unfolded part steps into it");
     await press("h", "h");
-    assert.deepEqual(await listed(), ["== Skills the model sees 60"]);
-    h.calls.length = 0;
+    assert.deepEqual(await listed(), ["== Your setup 60", "== Skills 60", "== Automatic 60"]);
     await press("h");
-    assert.deepEqual(await listed(), ["== Skills the model sees 60"]);
+    assert.ok((await told()).some((x) => x.startsWith("Skills: mine")), (await told()).join(" | "));
+    ok("h on an unfolded part's line folds it; on a folded one it goes to the part it is in");
+    h.calls.length = 0;
+    await press("h", "h", "h");
+    assert.deepEqual(await listed(), ["== Your setup 60"]);
+    await press("h");
+    assert.deepEqual(await listed(), ["== Your setup 60"]);
     assert.deepEqual(h.calls, []);
-    ok("h on an unfolded part's line folds it; on a folded one it does nothing (the keyboard stays)");
-    await press("right");
-    assert.equal((await listed())[1], "s00");
-    await press("left", "left", "l");
-    assert.equal((await listed())[1], "s00");
+    ok("h on a folded top part does nothing (the keyboard stays)");
+    await press("right", "right", "l", "l", "l");
+    assert.equal((await listed())[3], "s00");
+    await press("left", "left");
+    assert.deepEqual(await listed(), ["== Your setup 60", "== Skills 60", "== Automatic 60"]);
     await press("escape");
     assert.deepEqual(plain(h.calls.at(-1)), ["pane.go", { direction: "left" }]);
     ok("right and left as l and h; esc: the keyboard to the terminals");
   }
 
-  // A session found: the whole context by part, from the request as sent and the notes attached; the skills from
+  // A session found: the whole context as a tree, from the request as sent and the notes attached; the skills from
   // the model's own listing (a plugin's too) and the bodies loaded.
   {
     const rows = [
       LISTING("- tdd: Test-driven development. Use it: test-first.\n- docs:pdf: Read PDFs.\n  - not a skill: a second line.\n- dataviz: Charts.", ["tdd", "docs:pdf", "dataviz"]),
       NOTE({ type: "instructions", files: [{ path: "/home/me/.claude/CLAUDE.md", type: "User", content: "i".repeat(1200) }] }, 1300),
       NOTE({ type: "nested_memory", path: "/work/real/CLAUDE.md", content: { path: "/work/real/CLAUDE.md", type: "Project", content: "n".repeat(400) } }, 450),
-      NOTE({ type: "mcp_instructions_delta", addedNames: ["docs", "gone-server"], addedBlocks: ["## docs\n".padEnd(400, "m"), "x".repeat(4000)], removedNames: [] }, 4500),
+      NOTE({ type: "mcp_instructions_delta", addedNames: ["my docs", "gone-server"], addedBlocks: ["## my docs\n".padEnd(400, "m"), "x".repeat(4000)], removedNames: [] }, 4500),
       NOTE({ type: "mcp_instructions_delta", addedNames: [], addedBlocks: [], removedNames: ["gone-server"] }, 10),
-      NOTE({ type: "deferred_tools_delta", addedNames: ["WebSearch", "mcp__docs__write"] }, 400),
+      NOTE({ type: "deferred_tools_delta", addedNames: ["WebSearch", "mcp__my_docs__write", "mcp__mail__send"] }, 400),
       NOTE({ type: "agent_listing_delta", addedTypes: ["Explore"], addedLines: ["- Explore: Searches.".padEnd(200, " ")] }, 300),
       NOTE({ type: "environment", snapshot: {} }, 200),
-      { type: "api-request-blob", message: { role: "system", content: [{ type: "text", text: "x" }, ADDED("mcp__docs__read", 800)] } },
+      { type: "api-request-blob", message: { role: "system", content: [{ type: "text", text: "x" }, ADDED("mcp__my_docs__read", 800)] } },
       BODY(`${USER}/tdd`, 4000, true), BODY(`${USER}/grill-me`, 400, false), BODY("/plugins/cache/docs/skills/pdf", 2000, true), BODY("/plugins/cache/docs/skills/pdf", 2000, true),
     ];
     const shape = { system: [{ type: "text", text: "s".repeat(1000) }, { type: "text", text: "s".repeat(3000) }], tools: [TOOL("Bash", 2000)] };
@@ -184,54 +196,65 @@ const USER = "/home/me/.claude/skills";
     h.world.execs.length = 0;
     // A tall pane: every line fits.
     fire(find(pane.render(), "context"), "on_size_change", { height: 1400 }, h.cx);
-    assert.deepEqual(await listed(true), [
-      "== Conversation ~95.5k", "== System prompt ~1.0k", "== Tools 2 ~600", "== MCP 2 ~300", "== Instructions 2 ~400", "== Agent types 1 ~50", "== Session notes 1 ~50",
-      "== Skills loaded 3 ~2.1k",
-      "== Skills, description only 3 ~5", "dataviz ~5", "no-header", "quiet [name only]",
-      "== Skills only you run (/name) 1", "brandkit", "== Skills off 1",
-    ]);
+    // Folded again, as at first: the manual skills, unfolded above.
+    await draw(); await at("setup/skills/manual"); await press("h");
+    const whole = [
+      "== Your setup 14 ~2.8k",
+      "== Skills 8 ~2.1k", "== Automatic 5 ~2.0k", "== Manual (/name) 2 ~100", "== Off 1",
+      "== Instructions 2 ~400", "== MCP 4 ~309",
+      "== Claude Code's own 4 ~1.7k",
+      "== System prompt ~1.0k", "== Tools 2 ~591", "== Agent types 1 ~50", "== Session notes 1 ~50",
+      "== Conversation ~95.5k",
+    ];
+    assert.deepEqual(await listed(true), whole);
     assert.deepEqual(plain(reads().map(([, a, o]) => [a[3], a[4], o])), [["/work/sess", "t5", { on: "vps" }]]);
-    assert.deepEqual(strings(find(await draw(), "context-sum")), ["100k context", "skills ~2.1k · 2.1%"]);
-    ok("a session found: a line per part of the context with its tokens, the conversation as the rest of the real context; then the skills, loaded ones first, from the model's own listing");
+    assert.deepEqual(strings(find(await draw(), "context-sum")), ["100k context", "~4.5k without conversation"]);
+    assert.deepEqual(["setup", "setup/skills/manual", "own/tools", "talk"].map((id) => strings(find(pane.render(), `context-h-${id}`)).at(-1)), ["3%", "<1%", "1%", "95%"]);
+    ok("a session found: a tree by what can be done about it, the dearest first at every level (my setup, Claude Code's own), each part with its tokens and its share; last the conversation, the rest of the real context");
 
-    const unfolded = async (label) => { const l = await listed(true), i = l.findIndex((x) => x.startsWith(`== ${label}`)); return l.slice(i + 1, l.findIndex((x, j) => j > i && x.startsWith("== "))); };
-    await press("g", "g");
+    await at("talk");
     assert.ok((await told()).includes("~95.5k tokens · 95.5%"), (await told()).join(" | "));
-    await press("enter", "j", "j", "enter");
-    assert.deepEqual(await unfolded("Tools"), ["Bash ~500", "names of deferred tools [2] ~100"]);
-    assert.ok((await told()).includes("~600 tokens · 0.6% · 2 rows"), (await told()).join(" | "));
-    await press("j", "j", "j", "enter");
-    assert.deepEqual(await unfolded("MCP"), ["docs · read [tool] ~200", "docs [instructions] ~100"]);
-    await press("j", "j", "j", "enter", "j");
-    assert.deepEqual(await unfolded("Instructions"), ["~/.claude/CLAUDE.md [user] ~300", "/work/real/CLAUDE.md [project] ~100"]);
+    await press("l");
+    assert.deepEqual(await listed(true), whole);
+    await at("own/tools"); await press("l");
+    assert.deepEqual(await under("Tools"), ["Bash ~500", "names of deferred tools [1] ~91"]);
+    assert.ok((await told()).includes("~591 tokens · 0.6% · 2 rows"), (await told()).join(" | "));
+    await at("setup/mcp"); await press("l", "l", "l");
+    assert.deepEqual(await under("MCP"), []);
+    assert.deepEqual((await listed(true)).filter((x) => /^== (my docs|mail)/.test(x)), ["== my docs 3 ~305", "== mail 1 ~4"]);
+    assert.deepEqual(await under("my docs"), ["read [tool] ~200", "instructions ~100", "names of deferred tools [1] ~5"]);
+    await at("setup/instructions"); await press("l", "l");
+    assert.deepEqual(await under("Instructions"), ["~/.claude/CLAUDE.md [user] ~300", "/work/real/CLAUDE.md [project] ~100"]);
     assert.ok((await told()).includes("~300 tokens · 0.3%") && (await told()).includes("~/.claude/CLAUDE.md"), (await told()).join(" | "));
     h.world.execs.length = 0; h.notes.length = 0;
     await press("enter");
     assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /another machine/);
-    ok("a part unfolds to its rows: each tool, an MCP server's instructions and its loaded tools (a server taken away is gone), each instruction file; a file on another machine is not opened");
-    await press("h", "h", "k", "h", "h", "k", "h", "h");
-    assert.equal((await listed()).length, 15);
+    ok("a part unfolds to its rows: each tool; MCP by server, each with its instructions, its loaded tools and its share of the deferred tools' names (a server taken away is gone); each instruction file; a file on another machine is not opened");
+    h.notes.length = 0;
+    await at("own/tools"); await press("l", "enter");
+    assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /No file known for Bash/);
+    ok("a row that is no file (a tool) says so");
+    await press("h", "h"); await at("setup/instructions"); await press("h"); await at("setup/mcp/my_docs"); await press("h", "h", "h");
+    assert.deepEqual(await listed(true), whole);
 
-    await press("g", "g", "j", "j", "j", "j", "j", "j", "j", "enter");
-    assert.deepEqual((await listed(true)).slice(7, 11), ["== Skills loaded 3 ~2.1k", "docs:pdf [plugin] ~1.0k", "tdd ~1.0k", "grill-me ~100"]);
-    await press("j");
+    await at("setup/skills/auto"); await press("l");
+    assert.deepEqual(await under("Automatic"), ["docs:pdf [plugin · loaded] ~1.0k", "tdd [loaded] ~1.0k", "dataviz ~5", "no-header", "quiet [name only]"]);
+    await press("l");
     const pdf = await told();
     assert.ok(pdf.some((x) => /^Read PDFs\.\s+- not a skill: a second line\.$/.test(x)), pdf.join(" | "));
     assert.ok(pdf.includes("description ~14 · body ~1.0k (×2) · the model loaded it"), pdf.join(" | "));
+    assert.ok(pdf.includes("/plugins/cache/docs/skills/pdf/SKILL.md"), pdf.join(" | "));
     h.world.execs.length = 0; h.notes.length = 0;
     await press("enter");
-    assert.ok(pdf.includes("/plugins/cache/docs/skills/pdf/SKILL.md"), pdf.join(" | "));
     assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /another machine/);
     await press("j");
     assert.ok((await told()).includes("description ~13 · body ~1.0k · the model loaded it"));
-    await press("j");
+    await at("setup/skills/manual"); await press("l");
+    assert.deepEqual(await under("Manual"), ["grill-me [loaded] ~100", "brandkit"]);
+    await press("l");
     assert.ok((await told()).includes("body ~100 · you ran it"));
-    ok("the loaded skills unfolded (description + body): a skill's tokens part by part and who loaded it; a plugin's loaded skill has its file, from the folder its body names");
-    h.notes.length = 0;
-    await press("g", "g", "j", "j", "l", "l", "enter");
-    assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /No file known for Bash/);
     await press("h", "h");
-    ok("a row that is no file (a tool) says so");
+    ok("skills by who starts them: automatic (the description, and the body once loaded) and manual (nothing until I run one); a loaded one is marked, with its tokens part by part and who loaded it; a plugin's loaded skill has its file, from the folder its body names");
 
     h.world.execs.length = 0;
     rows.push(BODY("/work/real/.claude/skills/deploy", 800, true));
@@ -239,16 +262,17 @@ const USER = "/home/me/.claude/skills";
     await draw();
     assert.equal(reads().length, 0);
     h.setStatus("vps/t5", "idle");
-    assert.ok((await listed(true)).includes("deploy ~200"));
+    assert.ok((await listed(true)).includes("deploy [loaded] ~200"));
     assert.equal(reads().length, 1);
     ok("the followed agent stops working: read again (a turn may have loaded a skill)");
+    await at("setup/skills/auto"); await press("h");
 
     // Compaction drops the bodies and the notes before it; the bodies Claude Code kept are counted, and a note not sent again stays.
     disk["/work/sess"] = T("/work/real", [rows[0], rows[9], NOTE({ type: "environment" }, 4000), { type: "system", subtype: "compact_boundary" }, NOTE({ type: "environment" }, 200),
       NOTE({ type: "invoked_skills", skills: [{ name: "grill-me", path: "userSettings:grill-me", content: "x".repeat(800) }] })], '"usage":{"input_tokens":50000') + user;
     await press("r");
-    assert.deepEqual((await listed(true)).slice(0, 5), ["== Conversation ~49.7k", "== Session notes 1 ~50", "== Skills loaded 1 ~200", "grill-me ~200", "== Skills, description only 5 ~32"]);
-    assert.deepEqual(strings(find(await draw(), "context-sum")), ["50.0k context", "skills ~232 · 0.5% · compacted"]);
+    assert.deepEqual(await listed(true), ["== Your setup 8 ~232", "== Skills 8 ~232", "== Manual (/name) 2 ~200", "== Automatic 5 ~32", "== Off 1", "== Claude Code's own 1 ~50", "== Session notes 1 ~50", "== Conversation ~49.7k"]);
+    assert.deepEqual(strings(find(await draw(), "context-sum")), ["50.0k context", "~282 without conversation · compacted"]);
     ok("after a compaction: only the bodies kept through it are loaded, and the notes sent again replace the old");
 
     disk["/work/sess"] = T("/work/real", []) + user;

@@ -1,8 +1,10 @@
 // The context pane, in the sidebar in place of the agents list: what is in the focused agent's context and what each
-// part costs. A line per part (the conversation, the system prompt, tools, MCP, instructions, agent types, session
-// notes), each unfolding to its rows (all folded at first), then the skills: loaded ones (the whole SKILL.md is in the context), the ones
-// only described to the model, and the ones the model does not see. Tokens are characters / 4, an estimate; the
-// context's size is the real one from the last turn, and the conversation is what is left of it after the other parts.
+// part costs, as a tree by what can be done about it, the dearest first at every level. Claude Code's own (tools,
+// system prompt, agent types, session notes: the same in every session), my setup (skills, instruction files, MCP by
+// server: mine to trim) and last the conversation. Skills are split by who starts them: automatic (the agent is given
+// the description and may load the skill itself), manual (only I run it, by /name) and off; a loaded one (the whole
+// SKILL.md is in the context) is marked. Tokens are characters / 4, an estimate; the context's size is the real one
+// from the last turn, and the conversation is what is left of it after the other parts.
 // Claude Code only so far; for another agent it says so.
 // Read on the agent's machine, in one exec. The agent's session: the live Claude Code process whose HC_TERMINAL_ID is
 // the agent's terminal (~/.claude/sessions/<pid>.json), and from that session's transcript the request as it was sent
@@ -25,7 +27,7 @@ import { focused, panes, layout, exec, theme, settings, shared, nextCommand, run
 
 const ROW = 24;
 // Fixed heights, so the lines that fit can be counted from the pane's own height (told in zoomed pixels).
-const HEAD = 36, SUM = 26, ABOUT = 140, FOOT = 26, PAD = 6;
+const HEAD = 36, SUM = 26, ABOUT = 140, FOOT = 26, PAD = 6, INDENT = 14;
 // $1: the pane's folder. $2: the agent's terminal id. Prints NUL-separated records: T folder lines (the session's
 // folder and its transcript's lines about what is in the context), U usage (the last turn's), P line (the request as
 // last sent: system prompt and tools), S scope file header (a SKILL.md), O scope text (a settings file).
@@ -85,6 +87,8 @@ true`;
 export const tokens = (text) => Math.ceil((text ?? "").length / 4);
 export const about = (n) => n < 1000 ? `~${n}` : `~${(n / 1000).toFixed(n < 99950 ? 1 : 0)}k`;
 const sum = (list, of) => list.reduce((n, x) => n + of(x), 0);
+// A part's share of the context, for its line: whole percent.
+const percent = (n, of) => { const x = 100 * n / of; return x < 0.5 ? "<1%" : `${Math.round(x)}%`; };
 const short = (path) => (path ?? "").replace(/^\/home\/[^/]+/, "~");
 
 const unquote = (v) => /^(".*"|'.*')$/.test(v) ? v.slice(1, -1) : v;
@@ -160,42 +164,47 @@ function skillsIn(found, over, seen) {
     if (byName.has(name)) continue;
     const state = over.local?.[name] ?? over.project?.[name] ?? over.user?.[name] ?? "on";
     const manual = /^true$/i.test(s.head["disable-model-invocation"] ?? "");
-    const group = told?.has(name) ? "model" : state === "off" ? "off" : manual || state === "user-invocable-only" ? "you" : "model";
-    const note = [s.scope === "project" ? "repo" : "", group !== "model" ? "" : state === "name-only" ? "name only" : /^false$/i.test(s.head["user-invocable"] ?? "") ? "model only" : ""].filter(Boolean).join(" · ");
+    // Automatic: the model is given the description and may load the skill itself. Manual: only I run it, by /name.
+    const kind = told?.has(name) ? "auto" : state === "off" ? "off" : manual || state === "user-invocable-only" ? "manual" : "auto";
+    const note = [s.scope === "project" ? "repo" : "", kind !== "auto" ? "" : state === "name-only" ? "name only" : /^false$/i.test(s.head["user-invocable"] ?? "") ? "model only" : ""].filter(Boolean).join(" · ");
     const description = s.head.description ?? "";
-    const listed = group !== "model" ? null : told ? told.get(name)?.tokens ?? null : tokens(state === "name-only" ? `- ${name}` : `- ${name}: ${description}`);
-    byName.set(name, { name, description, file: s.file, group, note, listed, body: 0, times: 0, how: "" });
+    const listed = kind !== "auto" ? null : told ? told.get(name)?.tokens ?? null : tokens(state === "name-only" ? `- ${name}` : `- ${name}: ${description}`);
+    byName.set(name, { name, description, file: s.file, kind, note, listed, body: 0, times: 0, how: "", loaded: false });
   }
   // The ones only the listing knows: plugin and built-in skills.
-  for (const [name, l] of told ?? []) if (!byName.has(name)) byName.set(name, { name, description: l.description, file: null, group: "model", note: name.includes(":") ? "plugin" : "", listed: l.tokens, body: 0, times: 0, how: "" });
+  for (const [name, l] of told ?? []) if (!byName.has(name)) byName.set(name, { name, description: l.description, file: null, kind: "auto", note: name.includes(":") ? "plugin" : "", listed: l.tokens, body: 0, times: 0, how: "", loaded: false });
   for (const b of seen?.bodies ?? []) {
     const base = b.dir?.split("/").filter(Boolean).at(-1);
     const name = b.name ?? [...byName.values()].find((s) => s.file === `${b.dir}/SKILL.md`)?.name
       ?? [...byName.keys()].find((n) => n === base || n.endsWith(`:${base}`)) ?? base;
-    if (!byName.has(name)) byName.set(name, { name, description: "", file: b.dir ? `${b.dir}/SKILL.md` : null, group: "model", note: "", listed: null, body: 0, times: 0, how: "" });
+    // One neither on disk nor listed: manual when I ran it, else the model's.
+    if (!byName.has(name)) byName.set(name, { name, description: "", file: b.dir ? `${b.dir}/SKILL.md` : null, kind: b.how === "you ran it" ? "manual" : "auto", note: "", listed: null, body: 0, times: 0, how: "", loaded: false });
     const s = byName.get(name);
     // A plugin's skill is not among the disk's: its file is known once it is loaded, from the folder the body names.
     if (!s.file && b.dir) s.file = `${b.dir}/SKILL.md`;
-    s.body += b.tokens; s.times++; s.how = b.how; s.group = "loaded";
+    s.body += b.tokens; s.times++; s.how = b.how; s.loaded = true;
   }
   // A row's tokens, part by part.
-  const detail = (s) => s.group === "loaded" ? [s.listed != null ? `description ${about(s.listed)}` : "", `body ${about(s.body)}${s.times > 1 ? ` (×${s.times})` : ""}`, s.how].filter(Boolean).join(" · ")
-    : s.listed != null ? `description ${about(s.listed)} · not loaded` : s.group === "model" && told ? "not in the model's list" : s.group === "model" ? "" : "not in the context";
-  return [...byName.values()].map((s) => ({ ...s, tokens: cost(s), detail: detail(s) })).sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name));
+  const detail = (s) => s.loaded ? [s.listed != null ? `description ${about(s.listed)}` : "", `body ${about(s.body)}${s.times > 1 ? ` (×${s.times})` : ""}`, s.how].filter(Boolean).join(" · ")
+    : s.listed != null ? `description ${about(s.listed)} · not loaded` : s.kind === "auto" && told ? "not in the model's list" : s.kind === "auto" ? "" : "not in the context";
+  return [...byName.values()].map((s) => ({ ...s, kids: [], note: [s.note, s.loaded ? "loaded" : ""].filter(Boolean).join(" · "), tokens: cost(s), detail: detail(s) }));
 }
 
 const byCost = (items) => items.sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name));
-const row = (name, n, more) => ({ name, tokens: n, note: "", description: "", detail: "", file: null, ...more });
-// The other parts of a session's context, each { key, label, about, items }: the request as sent (shape) and the notes attached.
+// The tree's nodes. A row: one thing in the context. A part: a line that holds rows or other parts (kids, dearest
+// first), its tokens their sum (and its own, for a part with no rows); count is the rows under it.
+const row = (name, n, more) => ({ name, tokens: n, note: "", description: "", detail: "", file: null, kids: [], ...more });
+const part = (key, name, description, kids, own = 0) => ({ key, name, description, note: "", detail: "", file: null, part: true,
+  kids: byCost(kids), tokens: own + sum(kids, (x) => x.tokens), count: sum(kids, (x) => x.part ? x.count : 1) });
+// Parts with nothing in them are left out.
+const full = (parts) => parts.filter((x) => x.tokens || x.kids.length);
+// An MCP server's name as its tools carry it: mcp__<name>__<tool>.
+const mcp = (name) => name.startsWith("mcp__"), serverOf = (name) => name.slice(5).split("__")[0];
+// The other parts of a session's context, by key: the request as sent (shape) and the notes attached.
 function partsIn(seen, shape) {
   const notes = seen.notes, all = (type) => notes[type] ?? [];
   const tools = [...(shape?.tools ?? []).map((t) => [t.name ?? t.type ?? "a tool", tokens(JSON.stringify(t)), t.description ?? ""]), ...[...seen.added].map(([name, n]) => [name, n, "Loaded after the start (a deferred tool)."])];
   const deferred = all("deferred_tools_delta"), names = deferred.flatMap((r) => r.attachment.addedNames ?? []);
-  const servers = new Map();
-  for (const r of all("mcp_instructions_delta")) {
-    (r.attachment.addedNames ?? []).forEach((name, i) => servers.set(name, r.attachment.addedBlocks?.[i] ?? ""));
-    for (const name of r.attachment.removedNames ?? []) servers.delete(name);
-  }
   const agents = new Map();
   for (const r of all("agent_listing_delta")) {
     (r.attachment.addedTypes ?? []).forEach((type, i) => agents.set(type, r.attachment.addedLines?.[i] ?? ""));
@@ -203,30 +212,43 @@ function partsIn(seen, shape) {
   }
   const files = new Map();
   for (const f of [...all("instructions").flatMap((r) => r.attachment.files ?? []), ...all("nested_memory").map((r) => r.attachment.content)]) if (f?.path) files.set(f.path, f);
-  const mcp = (name) => name.startsWith("mcp__");
-  return [
-    { key: "system", label: "System prompt", about: "Claude Code's own instructions to the model, sent with every request.",
-      own: shape ? sum(shape.system ?? [], (b) => tokens(b.text)) : 0, items: [] },
-    { key: "tools", label: "Tools", about: "The definitions of the tools the model can call, and the names of the ones it can load.",
-      items: byCost([...tools.filter(([name]) => !mcp(name)).map(([name, n, description]) => row(name, n, { description })),
-        ...(deferred.length ? [row("names of deferred tools", sum(deferred, (r) => tokens(rendered(r))), { note: String(names.length), description: names.join(", ") })] : [])]) },
-    { key: "mcp", label: "MCP", about: "MCP servers: their instructions, and the definitions of their tools that are loaded.",
-      items: byCost([...[...servers].map(([name, text]) => row(name, tokens(text), { note: "instructions", description: text.replace(/^## .*\n/, "") })),
-        ...tools.filter(([name]) => mcp(name)).map(([name, n, description]) => row(name.slice(5).replace("__", " · "), n, { note: "tool", description }))]) },
-    { key: "instructions", label: "Instructions", about: "CLAUDE.md and the other instruction files loaded for this session.",
-      items: byCost([...files.values()].map((f) => row(short(f.path), tokens(f.content), { note: (f.type ?? "").toLowerCase(), description: f.content ?? "", file: f.path }))) },
-    { key: "agents", label: "Agent types", about: "The agent types the model can start, as described to it.",
-      items: byCost([...agents].map(([type, line]) => row(type, tokens(line), { description: line.replace(/^- [^:]+: /, "") }))) },
-    { key: "session", label: "Session notes", about: "What Claude Code tells the model about this session: the folder, the model, git status, the date.",
-      items: byCost(["environment", "session_context", "model", "date", "auto_mode"].filter((type) => all(type).length)
-        .map((type) => row(type.replace(/_/g, " "), sum(all(type), (r) => tokens(rendered(r))), { note: all(type).length > 1 ? `×${all(type).length}` : "", description: rendered(all(type).at(-1)) }))) },
-  ];
+  // MCP by server: its instructions, its tools' definitions that are loaded, and its share of the deferred tools' names.
+  const told = new Map();
+  for (const r of all("mcp_instructions_delta")) {
+    (r.attachment.addedNames ?? []).forEach((name, i) => told.set(name, r.attachment.addedBlocks?.[i] ?? ""));
+    for (const name of r.attachment.removedNames ?? []) told.delete(name);
+  }
+  const servers = new Map(), server = (key, name) => { if (!servers.has(key)) servers.set(key, { name: name ?? key, kids: [] }); return servers.get(key); };
+  for (const [name, text] of told) server(name.replace(/[^A-Za-z0-9_-]/g, "_"), name).kids.push(row("instructions", tokens(text), { description: text.replace(/^## .*\n/, "") }));
+  for (const [name, n, description] of tools.filter(([name]) => mcp(name))) server(serverOf(name)).kids.push(row(name.slice(5 + serverOf(name).length + 2) || name, n, { note: "tool", description }));
+  const waiting = new Map();
+  for (const name of names.filter(mcp)) waiting.set(serverOf(name), [...(waiting.get(serverOf(name)) ?? []), name]);
+  for (const [key, list] of waiting) server(key).kids.push(row("names of deferred tools", tokens(list.join("\n") + "\n"), { note: String(list.length), description: list.map((name) => name.slice(5 + key.length + 2)).join(", ") }));
+  const theirs = sum([...waiting.values()], (list) => tokens(list.join("\n") + "\n")), own = names.filter((name) => !mcp(name));
+  return {
+    system: part("system", "System prompt", "Claude Code's own instructions to the model, sent with every request.", [], shape ? sum(shape.system ?? [], (b) => tokens(b.text)) : 0),
+    tools: part("tools", "Tools", "The definitions of Claude Code's own tools, and the names of the ones the model can load.",
+      [...tools.filter(([name]) => !mcp(name)).map(([name, n, description]) => row(name, n, { description })),
+        ...(deferred.length ? [row("names of deferred tools", Math.max(0, sum(deferred, (r) => tokens(rendered(r))) - theirs), { note: String(own.length), description: own.join(", ") })] : [])]),
+    mcp: part("mcp", "MCP", "MCP servers: for each, its instructions, the definitions of its tools that are loaded, and the names of the ones the model can load.",
+      [...servers].map(([key, s]) => part(key, s.name, `The MCP server ${s.name}.`, s.kids))),
+    instructions: part("instructions", "Instructions", "CLAUDE.md and the other instruction files loaded for this session.",
+      [...files.values()].map((f) => row(short(f.path), tokens(f.content), { note: (f.type ?? "").toLowerCase(), description: f.content ?? "", file: f.path }))),
+    agents: part("agents", "Agent types", "The agent types the model can start, as described to it.",
+      [...agents].map(([type, line]) => row(type, tokens(line), { description: line.replace(/^- [^:]+: /, "") }))),
+    session: part("session", "Session notes", "What Claude Code tells the model about this session: the folder, the model, git status, the date.",
+      ["environment", "session_context", "model", "date", "auto_mode"].filter((type) => all(type).length)
+        .map((type) => row(type.replace(/_/g, " "), sum(all(type), (r) => tokens(rendered(r))), { note: all(type).length > 1 ? `×${all(type).length}` : "", description: rendered(all(type).at(-1)) }))),
+  };
 }
 
-// What the read printed, as { groups, session }: the context's parts in the order drawn, each { key, label, about,
-// tokens, items }, an item { name, tokens, note, description, detail, file } (a skill also group, listed, body, times, how).
+// What the read printed, as { tree, session }. tree: the context as parts by what can be done about them, dearest
+// first at every level: Claude Code's own (tools, system prompt, agent types, session notes), my setup (skills, split
+// into automatic, manual and off; instruction files; MCP by server), and last the conversation, what is left of the
+// real context. A node: { name, tokens, note, description, detail, file, kids }, a part also { key, part, count }, a
+// skill also { kind, loaded, listed, body, times, how }.
 // session: null when none was found, else { cwd, listing (the model's own skill list was read), context (the last
-// turn's real size, or null), compacted }. With a context known, the first part is the conversation: what is left of it.
+// turn's real size, or null), compacted }.
 export function accountIn(stdout) {
   const parts = stdout.split("\0"), found = [], over = {};
   let seen = null, usage = "", shape = null;
@@ -238,20 +260,22 @@ export function accountIn(stdout) {
     else if (parts[i] === "P") { shape = json(parts[i + 1] ?? "")?.shape ?? null; i += 2; }
     else i++;
   }
-  const skills = skillsIn(found, over, seen), told = Boolean(seen?.listed.size);
-  const of = (group) => skills.filter((s) => s.group === group);
-  const groups = [
-    ...(seen ? partsIn(seen, shape) : []),
-    { key: "loaded", label: "Skills loaded", about: "Skills whose whole SKILL.md is in the context: the model loaded them, or you ran them.", items: of("loaded") },
-    // With no listing read, nothing says which are loaded: the group is just the ones the model sees.
-    { key: "model", label: told ? "Skills, description only" : "Skills the model sees", about: "Skills the model is told of by name and description; a body comes in when one is loaded.", items: of("model") },
-    { key: "you", label: "Skills only you run (/name)", about: "Skills kept from the model: not in the context until you run one.", items: of("you") },
-    { key: "off", label: "Skills off", about: "Skills switched off in the settings.", items: of("off") },
-  ].map((g) => ({ ...g, tokens: (g.own ?? 0) + sum(g.items, (x) => x.tokens) })).filter((g) => g.tokens || g.items.length);
+  const skills = skillsIn(found, over, seen), of = (kind) => skills.filter((s) => s.kind === kind), p = seen ? partsIn(seen, shape) : null;
+  const tree = byCost(full([
+    part("own", "Claude Code's own", "What Claude Code itself sends in every session. Not mine to trim.", full(p ? [p.tools, p.system, p.agents, p.session] : [])),
+    part("setup", "Your setup", "What my own setup adds: skills, instruction files, MCP servers. Trim one or switch it off to save.", full([
+      part("skills", "Skills", "Skills: mine, the repo's, the plugins' and the built-in ones.", full([
+        part("auto", "Automatic", "Skills the agent may load by itself: it is given each one's description, in the context always; the body comes in when one is loaded.", of("auto")),
+        part("manual", "Manual (/name)", "Skills only I run, by /name. Not in the context until I run one.", of("manual")),
+        part("off", "Off", "Skills switched off in the settings.", of("off")),
+      ])),
+      ...(p ? [p.instructions, p.mcp] : []),
+    ])),
+  ]));
   const n = (key) => Number(new RegExp(`"${key}":(\\d+)`).exec(usage)?.[1] ?? 0);
   const context = n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens");
-  if (context) groups.unshift({ key: "talk", label: "Conversation", about: "What was said, called and returned since the last compaction: the context's real size less the parts below.", tokens: Math.max(0, context - sum(groups, (g) => g.tokens)), items: [] });
-  return { groups, session: seen ? { cwd: seen.cwd, listing: told, context: context || null, compacted: seen.compacted } : null };
+  if (context) tree.push(part("talk", "Conversation", "What was said, called and returned since the last compaction: the context's real size less the parts above. It grows with every turn.", [], Math.max(0, context - sum(tree, (g) => g.tokens))));
+  return { tree, session: seen ? { cwd: seen.cwd, listing: Boolean(seen?.listed.size), context: context || null, compacted: seen.compacted } : null };
 }
 
 const find = (n, id) => n?.id === id ? n : (n?.children ?? []).map((c) => find(c, id)).find(Boolean) ?? null;
@@ -269,7 +293,8 @@ export default class Context extends View {
     this.handle = cx.focus_handle();
     this.agent = null; this.cursor = null; this.g = 0; this.top = 0; this.height = 600; this.fit = 16; this.wheel = 0;
     this.lists = new Map(); this.loading = new Set(); this.failed = new Set(); this.shown = null; this.status = null;
-    this.open = new Set();
+    // Unfolded at first: the two top parts and the skills, so the overview shows each part and the skills' kinds.
+    this.open = new Set(["own", "setup", "setup/skills"]);
     cx.spawn(async (cx) => { for (;;) { if (await nextCommand() === "focus") { this.handle.focus(); cx.notify(); } } });
     // <leader>ac asks for the keyboard and a fresh read through shared "context.open" (a time). One seen at start is old,
     // unless it is the very ask that showed this copy for the first time.
@@ -299,11 +324,18 @@ export default class Context extends View {
     });
   }
 
-  // The followed agent's context as the lines drawn: a line per part, then its rows when it is unfolded.
-  // Each has an id, the cursor's name for it.
+  // The followed agent's context as the lines drawn: the tree's nodes, a part's kids under it when it is unfolded.
+  // Each { id (the cursor's name for it: the keys down to it), node, depth, parent (its part's id) }.
   lines(p) {
-    return (this.lists.get(this.keyOf(p))?.groups ?? []).flatMap((group) => [{ id: `#${group.key}`, group },
-      ...(this.open.has(group.key) ? group.items.map((item) => ({ id: `${group.key}/${item.name}`, group, item })) : [])]);
+    const out = [], walk = (nodes, depth, parent) => {
+      for (const node of nodes) {
+        const id = `${parent ? parent + "/" : ""}${node.key ?? node.name}`;
+        out.push({ id, node, depth, parent });
+        if (node.kids.length && this.open.has(id)) walk(node.kids, depth + 1, id);
+      }
+    };
+    walk(this.lists.get(this.keyOf(p))?.tree ?? [], 0, null);
+    return out;
   }
 
   openFile(item, p) {
@@ -315,10 +347,10 @@ export default class Context extends View {
       .catch((err) => notify({ title: `Could not open ${item.name}`, body: String(err.message ?? err), level: "error" }));
   }
 
-  fold(group, cx) {
-    if (!group.items.length) return;
-    if (this.open.has(group.key)) this.open.delete(group.key); else this.open.add(group.key);
-    this.cursor = `#${group.key}`;
+  fold(line, cx) {
+    if (!line.node.kids.length) return;
+    if (this.open.has(line.id)) this.open.delete(line.id); else this.open.add(line.id);
+    this.cursor = line.id;
     cx.notify();
   }
 
@@ -346,14 +378,15 @@ export default class Context extends View {
     else if (e.key_char === "G" || k === "shift-g") move(list.length - 1);
     else if (k === "g") { if (g && Date.now() - g < 600) move(0); else this.g = Date.now(); }
     // As the explorer's tree: l opens a row's file, unfolds a part, or steps into an unfolded one; h folds a part, or
-    // goes from a row to its part.
+    // goes to the part a line is in.
     else if ((k === "l" || k === "enter" || k === "right") && line) {
-      if (line.item) this.openFile(line.item, p);
-      else if (!this.open.has(line.group.key)) this.fold(line.group, cx);
+      if (!line.node.part) this.openFile(line.node, p);
+      else if (!line.node.kids.length) { /* a part with no rows: nothing to unfold */ }
+      else if (!this.open.has(line.id)) this.fold(line, cx);
       else move(i + 1);
     } else if ((k === "h" || k === "left") && line) {
-      if (line.item) move(list.findIndex((l) => l.id === `#${line.group.key}`));
-      else if (this.open.has(line.group.key)) this.fold(line.group, cx);
+      if (line.node.kids.length && this.open.has(line.id)) this.fold(line, cx);
+      else if (line.parent) move(list.findIndex((l) => l.id === line.parent));
     }
     else if (k === "r") this.load(p, cx);
     else if (k === "q") { run("layout.select", { stack: "sidebar-body", child: "agents" }); run("pane.go", { direction: "left" }); }
@@ -370,36 +403,39 @@ export default class Context extends View {
     const stopped = this.status === "working" && p?.status !== "working" && key === this.shown;
     if (here && key && (fresh || stopped || key !== this.shown || (!this.lists.has(key) && !this.failed.has(key)))) { this.shown = key; this.load(p, cx); }
     this.status = p?.status ?? null;
-    const got = this.lists.get(key), session = got?.session ?? null, groups = got?.groups ?? [];
-    const skills = sum(groups.filter((g) => ["loaded", "model", "you", "off"].includes(g.key)), (g) => g.tokens);
+    const got = this.lists.get(key), session = got?.session ?? null, tree = got?.tree ?? [];
+    const rest = sum(tree.filter((g) => g.key !== "talk"), (g) => g.tokens);
     const share = (n) => session?.context ? `${(100 * n / session.context).toFixed(1)}%` : "";
-    const [size, side] = !got ? ["", ""] : session?.context ? [`${about(session.context).slice(1)} context`, `skills ${about(skills)} · ${share(skills)}${session.compacted ? " · compacted" : ""}`]
-      : [`${about(skills)} tokens`, !session ? "no session found: loaded unknown" : "no turn yet: loaded unknown"];
+    const [size, side] = !got ? ["", ""] : session?.context ? [`${about(session.context).slice(1)} context`, `${about(rest)} without conversation${session.compacted ? " · compacted" : ""}`]
+      : [`${about(rest)} tokens`, !session ? "no session found: loaded unknown" : "no turn yet: loaded unknown"];
     const focusedNow = this.handle.is_focused(), lines = this.lines(p);
     const sel = Math.max(0, lines.findIndex((l) => l.id === this.cursor)), cur = lines[sel] ?? null;
     // Only the lines that fit are drawn, moved to keep the cursor's in view (its part's line too, when it is the line above).
-    const fit = Math.max(1, Math.floor((this.height - HEAD - (got ? SUM : 0) - (cur ? ABOUT : 0) - FOOT - 2 * PAD - 2) / ROW)), first = sel > 0 && !lines[sel - 1].item ? sel - 1 : sel;
+    const fit = Math.max(1, Math.floor((this.height - HEAD - (got ? SUM : 0) - (cur ? ABOUT : 0) - FOOT - 2 * PAD - 2) / ROW)), first = sel > 0 && lines[sel - 1].id === cur.parent ? sel - 1 : sel;
     this.fit = fit;
     if (first < this.top) this.top = Math.max(0, first);
     if (sel >= this.top + fit) this.top = sel - fit + 1;
     this.top = Math.max(0, Math.min(this.top, Math.max(0, lines.length - fit)));
-    const pick = (l) => (_ev, cx) => { this.cursor = l.id; this.handle.focus(); if (!l.item) this.fold(l.group, cx); cx.notify(); };
-    const line = (l) => !l.item
-      ? h_flex().id(`context-h-${l.group.key}`).h(ROW).flex_none().px(8).gap(6).items_center().rounded(6).cursor_pointer()
+    const pick = (l) => (_ev, cx) => { this.cursor = l.id; this.handle.focus(); if (l.node.part) this.fold(l, cx); cx.notify(); };
+    // A part's line: an arrow, its name, the rows under it, its tokens and its share of the context. A row's: its name,
+    // a note, its tokens. Each level a step further in.
+    const line = (l) => { const n = l.node; return n.part
+      ? h_flex().id(`context-h-${l.id}`).h(ROW).flex_none().pl(8 + l.depth * INDENT).pr(8).gap(6).items_center().rounded(6).cursor_pointer()
         .when(focusedNow && l === cur, (el) => el.bg(t.hover)).hover((s) => s.bg(t.hover)).on_click(pick(l))
-        .child(div().flex_none().w(10).text_size(10).text_color(t.dim).child(!l.group.items.length ? "" : this.open.has(l.group.key) ? "▾" : "▸"))
-        .child(div().flex_1().min_w(0).truncate().font_semibold().child(l.group.label))
-        .when(l.group.items.length > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(String(l.group.items.length))))
-        .when(l.group.tokens > 0, (el) => el.child(div().flex_none().w(46).text_right().text_size(11).child(about(l.group.tokens))))
-      : h_flex().id(`context-row-${l.id}`).h(ROW).flex_none().pl(24).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
+        .child(div().flex_none().w(10).text_size(10).text_color(t.dim).child(!n.kids.length ? "" : this.open.has(l.id) ? "▾" : "▸"))
+        .child(div().flex_1().min_w(0).truncate().when(l.depth < 2, (el) => el.font_semibold()).child(n.name))
+        .when(n.count > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(String(n.count))))
+        .when(n.tokens > 0, (el) => el.child(div().flex_none().w(46).text_right().text_size(11).child(about(n.tokens))))
+        .when(n.tokens > 0 && Boolean(session?.context), (el) => el.child(div().flex_none().w(28).text_right().text_size(11).text_color(t.dim).child(percent(n.tokens, session.context))))
+      : h_flex().id(`context-row-${l.id}`).h(ROW).flex_none().pl(8 + l.depth * INDENT).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
         .when(focusedNow && l === cur, (el) => el.bg(t.hover)).hover((s) => s.bg(t.hover)).on_click(pick(l))
-        .child(div().flex_1().min_w(0).truncate().text_color(l.item.tokens ? t.foreground : t.muted).child(l.item.name))
-        .when(Boolean(l.item.note), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(l.item.note)))
-        .when(l.item.tokens > 0, (el) => el.child(div().flex_none().w(46).text_right().text_size(11).text_color(l.group.key === "loaded" ? t.foreground : t.dim).child(about(l.item.tokens))));
+        .child(div().flex_1().min_w(0).truncate().text_color(n.tokens ? t.foreground : t.muted).child(n.name))
+        .when(Boolean(n.note), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(n.note)))
+        .when(n.tokens > 0, (el) => el.child(div().flex_none().w(46).text_right().text_size(11).text_color(n.loaded ? t.foreground : t.dim).child(about(n.tokens)))); };
     // Under the list, the cursor's line: what it is, its tokens and its file.
-    const told = !cur ? [] : cur.item
-      ? [cur.item.description || "No description", [cur.item.detail || (cur.item.tokens ? `${about(cur.item.tokens)} tokens` : ""), cur.item.detail ? "" : share(cur.item.tokens)].filter(Boolean).join(" · "), cur.item.file ? short(cur.item.file) : ""]
-      : [cur.group.about, [cur.group.tokens ? `${about(cur.group.tokens)} tokens` : "not in the context", cur.group.tokens ? share(cur.group.tokens) : "", cur.group.items.length ? `${cur.group.items.length} rows` : ""].filter(Boolean).join(" · "), ""];
+    const at = cur?.node, told = !at ? [] : !at.part
+      ? [at.description || "No description", [at.detail || (at.tokens ? `${about(at.tokens)} tokens` : ""), at.detail ? "" : share(at.tokens)].filter(Boolean).join(" · "), at.file ? short(at.file) : ""]
+      : [at.description, [at.tokens ? `${about(at.tokens)} tokens` : "not in the context", at.tokens ? share(at.tokens) : "", at.count ? `${at.count} rows` : ""].filter(Boolean).join(" · "), ""];
     const empty = !p ? "No agent focused yet"
       : !key ? `Read for Claude Code only so far, not ${p.program?.name ?? p.app ?? "this agent"}`
       : this.failed.has(key) ? "Could not read the context (r tries again)"
