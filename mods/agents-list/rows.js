@@ -1,10 +1,11 @@
 // The agents list's rows and group headers, including their leaving ghosts.
-import { div, image, svg } from "gpui-kit";
+import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, run, openOverlay } from "herdr";
 import { namer } from "./name.js";
 import { focusAgent } from "./zoom.js";
 import { mark, label, mostUrgent } from "./agent-status.js";
+import { icon, duration } from "./agent-row.js";
 import { projectMark } from "./project.js";
 import { glow, hoverKept, tip, tipMark, POINTER_WATCH, pointerAt, pointerGone, pointerMoved } from "./tip.js";
 import { stop, within } from "./focus.js";
@@ -13,21 +14,6 @@ import { MOTION, foldArrow } from "./motion.js";
 // A one-line row and shelf or folder header, its folders 8 apart and its list's 1px between items (gap-px).
 const ROW = 36, HEAD = 32, HEAD_GAP = 8;
 export const STACK = 1;
-
-// The agent's icon from the app's program table: a one-color glyph or a picture.
-function icon(p, size, color) {
-  if (!p?.icon) return null;
-  return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
-}
-
-// How long it's been in its state, as the shipped agents list says it.
-function duration(ms) {
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return "<1m";
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
-}
 
 // Live sub-agents of `addr`, depth first, each with the tree lines in front of it.
 function agentTree(all, addr, lead = []) {

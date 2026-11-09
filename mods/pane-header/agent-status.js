@@ -81,6 +81,7 @@ const notNews = (k, word, kids) => stillSettled(k, word, kids) || Number(k?.labe
 //   agent(address, word?)  its word (`word` stands in for the one agents() gives, as the list's held done), null if none
 //   fromSubAgent(address)  its word is its sub-agents', not its own
 //   subAgent(terminal)     a sub-agent's own word (a terminal from terminals())
+//   subAgents(address)     how many live sub-agents it has, all the way down
 //   tab(id), buffer(id)    the most urgent of their agents; with none of them in agents(), Herdr's own rollup
 //                          (agents() isn't documented to list other machines' agents: a remote buffer keeps its mark)
 export function statusReader() {
@@ -110,6 +111,7 @@ export function statusReader() {
     agent,
     fromSubAgent: (addr) => { const w = agent(addr); return w != null && w !== "idle" && w !== own(addr, words.get(addr)); },
     subAgent: (k) => subWord(k, words),
+    subAgents: (addr) => kidsOf(addr).length,
     tab: (id) => among((a) => a.tab === id, () => buffers().flatMap((s) => s.tabs ?? []).find((c) => c.id === id)?.status),
     buffer: (id) => among((a) => a.space === id, () => buffers().find((s) => s.id === id)?.status),
   };

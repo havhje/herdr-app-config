@@ -23,7 +23,7 @@ const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
 // The mods and layout the checks are about. #13 renames these: change them here only.
-const MODS = { bufferline: "bufferline", explorer: "explorer", links: "links", paneHeader: "pane-header", agentsList: "agents-list", leader: "leader" };
+const MODS = { bufferline: "bufferline", explorer: "explorer", links: "links", paneHeader: "pane-header", agentsList: "agents-list", agentFinder: "agent-finder", leader: "leader" };
 const LAYOUT = "layouts/herdr_vim.json";
 
 // ---- gpui: every builder call is recorded on a node ----

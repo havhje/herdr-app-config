@@ -5,6 +5,7 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, spaces, focused, theme, shared, setShared, setAgentOrder, nextCommand, run } from "herdr";
 import { statusReader, urgency, label } from "./agent-status.js";
+import { stateOf } from "./agent-row.js";
 import { stopsInit, stopsEnd, focusRoot, enter, onStop } from "./focus.js";
 import { focusAgent } from "./zoom.js";
 import { planMotion, flying, leavingRows } from "./motion.js";
@@ -30,6 +31,8 @@ export default class AgentsList extends View {
     this.folded = JSON.parse(localStorage.getItem("folded") ?? "{}");
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
+    // Shared for the agent finder's times (agent-row.js).
+    setShared("agents.changed", this.changed);
     cx.timer.every(1000, () => this.compute());
     cx.timer.every(30000, (cx) => cx.notify()); // The rows' times move with nothing else changing.
     // Older installs kept pins in this list's storage; move them over once, before anything writes any.
@@ -51,14 +54,13 @@ export default class AgentsList extends View {
     cx.notify();
   }
 
-  // Stamps agents whose state changed. Done and idle count as one: looking at a
-  // finished agent turns done into idle, and looking isn't the agent doing anything.
+  // Stamps agents whose state changed (done and idle count as one: stateOf), and shares the stamps.
   track(list, now) {
     let dirty = false;
     // As the tab has it: when its state last changed, not when this list first saw it.
     const changedAt = new Map(spaces().flatMap((s) => s.tabs ?? []).map((c) => [c.id, c.changed_at]));
     for (const a of list) {
-      const s = a.status === "done" ? "idle" : a.status;
+      const s = stateOf(a);
       if (this.changed[a.address]?.s === s) continue;
       this.changed[a.address] = { s, at: changedAt.get(a.tab) ?? now };
       dirty = true;
@@ -68,6 +70,7 @@ export default class AgentsList extends View {
     const listed = new Set(list.map((a) => a.address));
     for (const [k, c] of Object.entries(this.changed)) if (!listed.has(k) && now - c.at > 30 * 86400000) delete this.changed[k];
     localStorage.setItem("changed", JSON.stringify(this.changed));
+    setShared("agents.changed", this.changed);
   }
 
   // Drops pins and fold choices of agents that ended. Only for machines the list has heard from:
@@ -107,7 +110,8 @@ export default class AgentsList extends View {
     // Every agent's status, sub-agents in (agent-status.js).
     const status = statusReader();
     // <leader>ai hides idle agents (shared "agents.hideIdle"); the one you're on and pinned ones stay.
-    let list = agents();
+    const every = agents();
+    let list = every;
     if (shared("agents.hideIdle")) list = list.filter((a) => status.agent(a.address) !== "idle" || a.focused || this.pins.includes(a.address));
     this.listed = new Set(list.map((a) => a.address));
     const all = terminals();
@@ -124,7 +128,8 @@ export default class AgentsList extends View {
       return k && this.listed.has(k.address) ? k.address : null;
     })();
     const viewing = (a) => a.focused || (a.address === ancestor && this.isFolded(a.address));
-    this.track(list, now);
+    // Every agent, hidden idle ones too: the agent finder lists them all.
+    this.track(every, now);
     this.hold(list);
     const byPriority = sort.id === "priority";
     // As shown: its agent status. Sorted, a viewed done agent keeps Done until left.

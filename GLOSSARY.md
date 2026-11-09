@@ -139,7 +139,7 @@ The tabs you landed on, in order, with the pane you were last on in each; `<lead
 _Avoid_: history, back stack
 
 **Agent finder**:
-The dialog that lists every agent to filter and go to, with when it needed me or finished and the selected agent's screen beside it; `<leader><space>`.
+The dialog that lists every agent to filter and go to, each with what it is on, its buffer and how long it has been in its agent status, and the selected agent's screen beside it; `<leader><space>`.
 _Avoid_: picker (Herdr's tab picker), switcher
 
 **Status log**:

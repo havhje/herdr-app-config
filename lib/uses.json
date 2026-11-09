@@ -1,8 +1,8 @@
 {
-  "agent-finder": ["agent-status.js"],
+  "agent-finder": ["agent-row.js", "agent-status.js", "name.js"],
   "leader": ["agent-status.js", "leader-records.js"],
   "sidebar-footer": ["focus.js", "tip.js"],
   "bufferline": ["agent-status.js", "leader-records.js"],
-  "agents-list": ["agent-status.js", "focus.js", "motion.js", "name.js", "project.js", "tip.js"],
+  "agents-list": ["agent-row.js", "agent-status.js", "focus.js", "motion.js", "name.js", "project.js", "tip.js"],
   "pane-header": ["agent-status.js", "focus.js", "name.js", "tip.js"]
 }
