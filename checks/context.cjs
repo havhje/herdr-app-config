@@ -15,6 +15,8 @@ const ok = (name) => console.log(`  ok  ${name}`);
 // agent's own folder has it; project: a repo's), and a settings file.
 const S = (scope, file, head) => `S\0${scope}\0${file}\0${head}\0`;
 const O = (scope, settings) => `O\0${scope}\0${JSON.stringify(settings)}\0`;
+// The skills folders read and the real folders behind the skills linked from them, to watch.
+const W = (...dirs) => `W\0${dirs.join("\n")}\n\0`;
 // A session found for the terminal: its folder, its transcript's lines, the last turn's usage and the request as sent.
 const T = (cwd, rows, usage = "", shape = null) => `T\0${cwd}\0${rows.map((r) => JSON.stringify(r)).join("\n")}\n\0U\0${usage}\0P\0${shape ? JSON.stringify({ type: "api-request-shape", shape }) : ""}\0`;
 const NOTE = (attachment, chars) => ({ type: "attachment", attachment, ...(chars ? { rendered: [{ type: "text", content: "x".repeat(chars) }], renderedRole: "user" } : {}) });
@@ -41,7 +43,8 @@ const USER = "/home/me/.claude/skills";
     + S("shared", `${USER}/gone/SKILL.md`, "name: gone\ndescription: Switched off.\n")
     + S("shared", `${USER}/quiet/SKILL.md`, "name: quiet\ndescription: Listed by name.\n")
     + S("user", `${USER}/no-header/SKILL.md`, "")
-    + O("user", { skillOverrides: { brandkit: "user-invocable-only", gone: "off", quiet: "name-only", deploy: "user-invocable-only" } });
+    + O("user", { skillOverrides: { brandkit: "user-invocable-only", gone: "off", quiet: "name-only", deploy: "user-invocable-only" } })
+    + W("/home/me/.agents/skills", USER, "/home/me/dotfiles/ai/skills/data");
   const disk = {
     "/work/alpha/src": user + S("project", "/work/alpha/.claude/skills/deploy/SKILL.md", "name: deploy\ndescription: Ships it.\n")
       + S("project", "/work/alpha/.claude/skills/tdd/SKILL.md", "name: tdd\ndescription: The repo's own tdd.\n")
@@ -77,6 +80,19 @@ const USER = "/home/me/.claude/skills";
   // The rows drawn under a part's line (the first so named, or the first after a top part's line).
   const under = async (label, group) => { const l = await listed(true), from = group ? l.findIndex((x) => x.startsWith(`== ${group}`)) : -1, i = l.findIndex((x, j) => j > from && x.startsWith(`== ${label}`)), end = l.findIndex((x, j) => j > i && x.startsWith("== ")); return l.slice(i + 1, end < 0 ? l.length : end); };
   assert.deepEqual(await listed(true), ["== Your setup", "== Skills", "== Automatic ~30", "== Manual (/name)"]);
+  // The folders the read named are watched; a change in one reads the followed agent again, only while this pane is shown.
+  assert.deepEqual(plain(reads().map(([, a, o]) => [a[3], a[4], a[5], o])), [["/work/alpha/src", "t1", "claude", {}]]);
+  assert.deepEqual([...new Set(h.world.watches)], ["/home/me/.agents/skills", USER, "/home/me/dotfiles/ai/skills/data"]);
+  h.world.change("/home/me/dotfiles/ai/skills/data"); await settle();
+  assert.equal(reads().length, 2);
+  assert.equal(h.world.watches.filter((w) => w === "/home/me/dotfiles/ai/skills/data").length, 2, "watched again after the change");
+  node("sidebar-body").active = "agents"; await draw();
+  h.world.change(USER); await settle();
+  assert.equal(reads().length, 2);
+  node("sidebar-body").active = "context"; await draw();
+  assert.equal(reads().length, 2);
+  ok("a skill made, deleted or edited in a skills folder: read again, while the pane is shown");
+  h.world.execs.length = 0; await draw(); assert.deepEqual(reads(), []);
   await at("setup/skills/auto");
   await press("enter");
   assert.deepEqual(await listed(true), [
@@ -86,9 +102,9 @@ const USER = "/home/me/.claude/skills";
   ]);
   assert.deepEqual(strings(find(await draw(), "context-sum")), ["~30 tokens", "no session found: loaded unknown"]);
   ok("no session found: the disk's skills under my setup, split by who starts them: automatic ones with their descriptions' tokens (characters / 4), dearest first, and manual ones; the header's and the settings' say (local, then repo, then mine) decide; one not in the shared ~/.agents/skills is marked");
-  assert.deepEqual(plain(reads().map(([, a, o]) => [a[3], a[4], a[5], o])), [["/work/alpha/src", "t1", "claude", {}]]);
+  assert.deepEqual(reads(), []);
   await draw();
-  assert.equal(reads().length, 1);
+  assert.equal(reads().length, 0);
   ok("one read for the agent's folder, terminal and kind, on its machine; drawing again reads nothing");
 
   assert.ok(strings(find(await draw(), "context-h-setup/skills/manual")).includes("▸") && strings(find(await draw(), "context-h-setup/skills/auto")).includes("▾"));

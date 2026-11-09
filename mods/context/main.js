@@ -47,13 +47,15 @@
 // the SKILL.md files the session's thread read since its last compaction (the newest thread of that folder written
 // since the process started).
 // What can be changed is from each agent's own documentation (Claude Code's settings and CLI reference, pi --help).
-// Read when the pane is opened, when another agent is followed and when the followed agent stops working; r reads again.
+// Read when the pane is opened, when another agent is followed, when the followed agent stops working, and when a
+// skill is made, deleted or edited in a skills folder read (the folders are watched, and the real folders behind the
+// skills linked from them; on this machine only); r reads again.
 // Keys as the explorer's: j/k, ctrl-d/ctrl-u half a page, gg/G, l (enter, right) unfolds a part, steps into an unfolded
 // one or opens a row's file in nvim (its own terminal window, as the explorer does), h (left) folds a part or goes from a row to its part. r reloads, q back to the
 // agents list, esc back to the terminals. <leader>ac shows it and puts it away.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { focused, panes, layout, exec, theme, settings, shared, nextCommand, run, notify } from "herdr";
+import { focused, panes, layout, exec, theme, settings, shared, nextCommand, run, notify, watchFolder } from "herdr";
 
 const ROW = 24;
 // Fixed heights, so the lines that fit can be counted from the pane's own height (told in zoomed pixels).
@@ -78,6 +80,17 @@ one() {
 }
 skills() { for f in "$2"/*/SKILL.md; do one "$1" "$f"; done; }
 overrides() { [ -f "$2" ] && { printf 'O\\0%s\\0' "$1"; cat "$2"; printf '\\0'; }; }
+# The skills folders read, and the real folders behind the skills linked from them (a watch on a folder does not
+# follow its links): W, a folder a line. Printed at the end, so an exit on the way leaves it out.
+watch() {
+  printf 'W\\0'
+  for d in "$@" "$HOME/.agents/skills"; do
+    [ -d "$d" ] || continue
+    echo "$d"
+    for s in "$d"/*/; do [ -L "\${s%/}" ] && readlink -f "\${s%/}"; done | sed 's|/[^/]*$||'
+  done | sort -u
+  printf '\\0'
+}
 oldest() {
   for e in /proc/[0-9]*/environ; do
     q=\${e#/proc/}; q=\${q%/environ}
@@ -114,6 +127,7 @@ if [ "$3" = codex ]; then
       body model 1 "$(printf '%s' "$l" | sed 's/.*"path":"//; s/"$//')"
     done
   fi
+  watch "$home/skills"
   exit 0
 fi
 if [ "$3" = pi ]; then
@@ -145,10 +159,15 @@ if [ "$3" = pi ]; then
       body you "\${l%%:*}" "$(printf '%s' "$l" | sed 's/.*location=..//; s/.$//')"
     done
   fi
-  printf '%s\\n' "$args" | sed -n '/^--skill$/{n;p;}' | while IFS= read -r a; do
-    if [ -f "$a/SKILL.md" ]; then one user "$a/SKILL.md"; else skills user "$a"; fi
-  done
-  printf '%s\\n' "$args" | grep -qx -e --no-skills || skills user "$adir/skills"
+  set --
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    if [ -f "$a/SKILL.md" ]; then one user "$a/SKILL.md"; set -- "$@" "\${a%/*}"; else skills user "$a"; set -- "$@" "$a"; fi
+  done <<EOF_SKILL
+$(printf '%s\\n' "$args" | sed -n '/^--skill$/{n;p;}')
+EOF_SKILL
+  printf '%s\\n' "$args" | grep -qx -e --no-skills || { skills user "$adir/skills"; set -- "$@" "$adir/skills"; }
+  watch "$@"
   exit 0
 fi
 live=
@@ -178,19 +197,22 @@ if [ -n "$f" ]; then
 fi
 skills user "$HOME/.claude/skills"
 overrides user "$HOME/.claude/settings.json"
-[ -d "$dir" ] || exit 0
-top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=$dir
-d=$dir
-while :; do
-  [ "$d" = "$HOME" ] || skills project "$d/.claude/skills"
-  [ "$d" = "$top" ] && break
-  d=\${d%/*}
-  [ -n "$d" ] || break
-done
-[ "$top" = "$HOME" ] && exit 0
-overrides project "$top/.claude/settings.json"
-overrides local "$top/.claude/settings.local.json"
-true`;
+set -- "$HOME/.claude/skills"
+if [ -d "$dir" ]; then
+  top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=$dir
+  d=$dir
+  while :; do
+    [ "$d" = "$HOME" ] || { skills project "$d/.claude/skills"; set -- "$@" "$d/.claude/skills"; }
+    [ "$d" = "$top" ] && break
+    d=\${d%/*}
+    [ -n "$d" ] || break
+  done
+  if [ "$top" != "$HOME" ]; then
+    overrides project "$top/.claude/settings.json"
+    overrides local "$top/.claude/settings.local.json"
+  fi
+fi
+watch "$@"`;
 
 // The agents read, by this mod's name for each, and what each is called.
 const AGENTS = { claude: "Claude Code", pi: "Pi", codex: "Codex" };
@@ -461,8 +483,9 @@ function codexParts(seen) {
 // a part also { key, part, count }, a skill also { mine, kind, loaded, listed, body, times, how }.
 // session: null when none was found, else { cwd, listing (the model's own skill list was read), context (the last
 // turn's real size, or null), compacted, preview (Codex: a new session's start, not this session's record) }.
+// watch: the skills folders read and the real folders behind the skills linked from them, to watch for changes.
 export function accountIn(stdout, agent = "claude") {
-  const parts = stdout.split("\0"), found = [], over = {}, loads = [];
+  const parts = stdout.split("\0"), found = [], over = {}, loads = [], watch = [];
   let seen = null, usage = "", shape = null, shared = new Set();
   for (let i = 0; i < parts.length - 1;) {
     if (parts[i] === "S") { found.push({ scope: parts[i + 1], file: parts[i + 2], head: header(parts[i + 3] ?? "") }); i += 4; }
@@ -474,6 +497,7 @@ export function accountIn(stdout, agent = "claude") {
     else if (parts[i] === "B") { loads.push({ how: parts[i + 1], file: parts[i + 2], bytes: Number(parts[i + 3]) || 0 }); i += 4; }
     else if (parts[i] === "U") { usage = parts[i + 1] ?? ""; i += 2; }
     else if (parts[i] === "P") { shape = json(parts[i + 1] ?? "")?.shape ?? null; i += 2; }
+    else if (parts[i] === "W") { watch.push(...(parts[i + 1] ?? "").split("\n").filter(Boolean)); i += 2; }
     else i++;
   }
   const pi = agent === "pi", codex = agent === "codex", name = AGENTS[agent] ?? AGENTS.claude;
@@ -500,7 +524,7 @@ export function accountIn(stdout, agent = "claude") {
   ]));
   const n = (...keys) => sum(keys, (key) => Number(new RegExp(`"${key}":(\\d+)`).exec(usage)?.[1] ?? 0));
   const context = pi ? n("input", "cacheRead", "cacheWrite") : n("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens");
-  return { tree, session: seen ? { cwd: seen.cwd, listing: Boolean(seen?.listed.size), context: context || null, compacted: seen.compacted, preview: codex } : null };
+  return { tree, watch, session: seen ? { cwd: seen.cwd, listing: Boolean(seen?.listed.size), context: context || null, compacted: seen.compacted, preview: codex } : null };
 }
 
 const find = (n, id) => n?.id === id ? n : (n?.children ?? []).map((c) => find(c, id)).find(Boolean) ?? null;
@@ -517,6 +541,7 @@ export default class Context extends View {
     this.handle = cx.focus_handle();
     this.agent = null; this.cursor = null; this.g = 0; this.top = 0; this.height = 600; this.fit = 16; this.wheel = 0;
     this.lists = new Map(); this.loading = new Set(); this.failed = new Set(); this.shown = null; this.status = null;
+    this.watched = new Set(); this.again = false;
     // Unfolded at first: the agent's two halves, my setup and my skills, so the overview shows each part and my skills' kinds.
     this.open = new Set(["agent", "agent/can", "agent/fixed", "setup", "setup/skills"]);
     cx.spawn(async (cx) => { for (;;) { if (await nextCommand() === "focus") { this.handle.focus(); cx.notify(); } } });
@@ -535,17 +560,31 @@ export default class Context extends View {
 
   keyOf(p) { const agent = agentOf(p); return agent ? `${agent}\n${p.terminal}\n${p.cwd ?? ""}` : null; }
 
-  load(p, cx) {
+  // A read asked for while one runs is dropped, unless it is a change's (fresh: a watch's or r's): then it follows.
+  load(p, cx, fresh = false) {
     const key = this.keyOf(p);
-    if (!key || this.loading.has(key)) return;
-    this.loading.add(key);
+    if (!key) return;
+    if (this.loading.has(key)) { if (fresh) this.again = true; return; }
+    this.loading.add(key); this.again = false;
     cx.spawn(async (cx) => {
       try {
         const agent = agentOf(p);
         const r = await exec("sh", ["-c", READ, "context", p.cwd ?? "", p.terminal.split("/").at(-1), agent], { on: machine(p.terminal) }).catch(() => null);
-        if (r?.code === 0) { this.lists.set(key, accountIn(r.stdout, agent)); this.failed.delete(key); }
+        if (r?.code === 0) { const got = accountIn(r.stdout, agent); this.lists.set(key, got); this.failed.delete(key); if (!machine(p.terminal)) for (const dir of got.watch) this.watch(dir, cx); }
         else this.failed.add(key);
-      } finally { this.loading.delete(key); cx.notify(); }
+      } finally { this.loading.delete(key); cx.notify(); if (this.again) this.load(p, cx); }
+    });
+  }
+
+  // A skills folder on this machine, watched once for as long as this copy lives: a skill made, deleted or edited
+  // there reads the followed agent again, while this pane is the one shown. A watch refused (a folder too deep) is
+  // dropped: r reads again.
+  watch(dir, cx) {
+    if (this.watched.has(dir)) return;
+    this.watched.add(dir);
+    cx.spawn(async (cx) => {
+      try { for (;;) { await watchFolder(dir); const p = this.follow(); if (shownNow() && p && this.keyOf(p) === this.shown) this.load(p, cx, true); } }
+      catch { this.watched.delete(dir); }
     });
   }
 
@@ -615,7 +654,7 @@ export default class Context extends View {
       if (line.node.kids.length && this.open.has(line.id)) this.fold(line, cx);
       else if (line.parent) move(list.findIndex((l) => l.id === line.parent));
     }
-    else if (k === "r") this.load(p, cx);
+    else if (k === "r") this.load(p, cx, true);
     else if (k === "q") { run("layout.select", { stack: "sidebar-body", child: "agents" }); run("pane.go", { direction: "left" }); }
     else if (k === "escape") run("pane.go", { direction: "left" });
     else return;

@@ -145,6 +145,10 @@ function fakeHerdr(opts = {}) {
     shared: {},
     execs: [], // [cmd, args, opts] for every exec a mod ran
     exec: null, // (cmd, args, opts) => { code, stdout, stderr }, set by a check
+    watches: [], // every folder a mod asked watchFolder for
+    waiting: {}, changed: new Set(), // the waits open per folder; folders changed before anyone waited
+    // A change under a folder: every open wait on it ends with that path (a later wait ends at once).
+    change: (p) => { const w = world.waiting[p] ?? []; delete world.waiting[p]; if (w.length) for (const r of w) r([p]); else world.changed.add(p); },
     layout: JSON.parse(fs.readFileSync(path.join(ROOT, opts.layout ?? LAYOUT), "utf8")),
     settings: { font: "JetBrains Mono", zoom: 1 },
   };
@@ -202,7 +206,9 @@ function fakeHerdr(opts = {}) {
     exec: async (cmd, args, opts) => { world.execs.push([cmd, copy(args), copy(opts ?? {})]); return world.exec?.(cmd, args, opts) ?? { code: 1, stdout: "", stderr: "" }; },
     hc: async (args) => { world.execs.push(["hc", copy(args), {}]); return world.exec?.("hc", args, {}) ?? { code: 1, stdout: "", stderr: "" }; },
     readTextFile: async () => null,
-    watchFolder: () => new Promise(() => {}),
+    // A check sees the folders watched in world.watches and ends a wait with world.change(path): the next watchFolder
+    // on that path resolves at once, until a check reads it again.
+    watchFolder: (p) => { world.watches.push(p); if (world.changed.has(p)) { world.changed.delete(p); return Promise.resolve([p]); } return new Promise((r) => { (world.waiting[p] = world.waiting[p] ?? []).push(r); }); },
     home: () => "/home/me",
     appHome: () => ROOT,
     keys: () => [],
