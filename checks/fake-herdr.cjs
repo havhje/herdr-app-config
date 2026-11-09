@@ -13,6 +13,7 @@
 // status is its most urgent agent's, blocked > done > working > idle, as herdr.d.ts says); shared/setShared;
 // run (recorded; pane/agent focus, space.select and layout show/hide/resize/select also change the world, and
 // `<mod>.<command>` reaches that mod's shown copies' nextCommand); notify/openOverlay (recorded); the shown layout;
+// exec (recorded in world.execs, answered by world.exec);
 // a theme whose every colour reads as its own name ("#working"); timers you flush by hand.
 // It knows nothing of any one mod: mod folders are named once, in MODS below.
 
@@ -22,7 +23,7 @@ const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
 // The mods and layout the checks are about. #13 renames these: change them here only.
-const MODS = { bufferline: "bufferline", paneHeader: "pane-header", agentsList: "agents-list", leader: "leader" };
+const MODS = { bufferline: "bufferline", explorer: "explorer", paneHeader: "pane-header", agentsList: "agents-list", leader: "leader" };
 const LAYOUT = "layouts/herdr_vim.json";
 
 // ---- gpui: every builder call is recorded on a node ----
@@ -78,7 +79,12 @@ const gpuiBase = {
   Button: { new: (id) => element("button").id(id) },
   Input: { new: () => element("input") },
   InputState: { new: () => ({ on() {}, value: () => "", set_value() {}, focus() {} }) },
-  Scrollbar: { new: () => element("scrollbar") },
+  Scrollbar: { new: () => element("scrollbar"), vertical: () => element("scrollbar") },
+  Editor: { new: () => element("editor") },
+  EditorState: { new: () => ({ release() {} }) },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+  // Draws every row: a check sees the whole list.
+  v_virtual_list: (id, count, _h, _key, rows) => element("list").id(id).children(rows({ start: 0, end: count })),
 };
 
 // ---- reading a rendered tree ----
@@ -137,6 +143,8 @@ function fakeHerdr(opts = {}) {
     focused: null, // { space, tab, pane }
     activeTab: {}, // space -> tab it shows
     shared: {},
+    execs: [], // [cmd, args, opts] for every exec a mod ran
+    exec: null, // (cmd, args, opts) => { code, stdout, stderr }, set by a check
     layout: JSON.parse(fs.readFileSync(path.join(ROOT, opts.layout ?? LAYOUT), "utf8")),
     settings: { font: "JetBrains Mono", zoom: 1 },
   };
@@ -190,7 +198,8 @@ function fakeHerdr(opts = {}) {
     openOverlay: (spec) => { overlays.push(copy(spec)); return `overlay-${overlays.length}`; },
     closeOverlay: () => null,
     setAgentOrder: () => null,
-    exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+    // A check answers programs with world.exec(cmd, args, opts); every call is in world.execs.
+    exec: async (cmd, args, opts) => { world.execs.push([cmd, copy(args), copy(opts ?? {})]); return world.exec?.(cmd, args, opts) ?? { code: 1, stdout: "", stderr: "" }; },
     hc: async () => ({ code: 1, stdout: "", stderr: "" }),
     readTextFile: async () => null,
     watchFolder: () => new Promise(() => {}),

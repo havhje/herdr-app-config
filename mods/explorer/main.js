@@ -229,7 +229,7 @@ export default class Explorer extends View {
     return rows;
   }
 
-  // The changed-only view (c): the changed files under the root and their folders, as a tree that
+  // The changed-only view (gs): the changed files under the root and their folders, as a tree that
   // opens and closes like the full one. Deleted files show here too.
   changed() {
     const root = this.root + "/", kids = new Map();
@@ -289,6 +289,14 @@ export default class Explorer extends View {
   }
 
   say(text) { this.note = text; }
+
+  // Mods have no clipboard: wl-copy on this computer (Omarchy is Wayland), whichever machine the file is on.
+  copyPath(path) {
+    const full = `${this.root}/${path}`;
+    exec("wl-copy", ["--", full])
+      .then((r) => { if (r.code !== 0) throw new Error(r.stderr.trim() || "wl-copy failed"); notify({ title: "Copied path", body: full, timeout: 2000 }); })
+      .catch((e) => notify({ title: "Could not copy path", body: String(e.message ?? e), level: "error" }));
+  }
 
   // The folder a new file goes in: the row's folder, or the folder holding the row.
   base(row) {
@@ -368,7 +376,7 @@ export default class Explorer extends View {
       return;
     }
     const list = this.shown(), i = this.at(list), row = list[i], page = Math.max(1, Math.floor(this.height / 28 / 2));
-    const g = this.g; this.g = 0;
+    const g = this.g, c2 = this.c; this.g = 0; this.c = 0;
     if (k === "j" || k === "down") this.move(list, i + 1, cx);
     else if (k === "k" || k === "up") this.move(list, i - 1, cx);
     else if (k === "ctrl-d") this.move(list, i + page, cx);
@@ -377,6 +385,8 @@ export default class Explorer extends View {
     else if (k === "g") { if (g && Date.now() - g < 600) this.move(list, 0, cx); else this.g = Date.now(); }
     // gs: the Changes view on and off (LazyVim's c is copy, so not c).
     else if (k === "s" && g && Date.now() - g < 600) { this.changedOnly = !this.changedOnly; cx.notify(); }
+    // cc: the row's full path to the clipboard.
+    else if (k === "c") { if (c2 && Date.now() - c2 < 600) { if (row) this.copyPath(row.path); } else this.c = Date.now(); }
     else if ((k === "l" || k === "enter" || k === "right") && row) {
       if (!row.entry.dir) this.edit(row.path, cx);
       else if (!this.folders.has(row.path)) this.toggle(row.path, cx);
