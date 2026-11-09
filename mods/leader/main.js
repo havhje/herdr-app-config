@@ -24,7 +24,7 @@ const links = () => {
   if (p && !p.hidden && l && !l.hidden) run("layout.hide", { id: "links" });
   else { run("layout.show", { id: "links" }); run("layout.show", { id: "panel" }); }
 };
-// What the sidebar shows above the leader menu: the agents list, or the skills pane in its place.
+// What the sidebar shows above the leader menu: the agents list, or the context pane in its place.
 const sidebarShows = () => find(layout(), "sidebar-body")?.active ?? "agents";
 const cmd = (name, args) => () => run(name, args);
 const active = () => spaces().find((s) => s.active);
@@ -95,15 +95,15 @@ const TREE = {
   } },
   a: { label: "+agents", keys: {
     // Shown: hide the sidebar. Hidden (the leader showed it just for itself): keep it and give the list the keyboard.
-    // With the skills pane in the list's place: back to the list, with the keyboard.
+    // With the context pane in the list's place: back to the list, with the keyboard.
     a: ["Toggle agents", (open) => {
       if (open?.sidebarHidden || sidebarShows() !== "agents") { run("layout.select", { stack: "sidebar-body", child: "agents" }); run("agents-list.focus"); }
       else { run("layout.hide", { id: "sidebar" }); }
     }, { keepSidebar: true }],
-    // The skills pane (mods/skills), in the agents list's place: shown, back to the list; else show it and give it the keyboard.
-    s: ["Skills of the focused agent", (open) => {
-      if (!open?.sidebarHidden && sidebarShows() === "skills") run("layout.select", { stack: "sidebar-body", child: "agents" });
-      else { run("layout.select", { stack: "sidebar-body", child: "skills" }); setShared("skills.open", Date.now()); }
+    // The context pane (mods/context), in the agents list's place: shown, back to the list; else show it and give it the keyboard.
+    c: ["Context of the focused agent", (open) => {
+      if (!open?.sidebarHidden && sidebarShows() === "context") run("layout.select", { stack: "sidebar-body", child: "agents" });
+      else { run("layout.select", { stack: "sidebar-body", child: "context" }); setShared("context.open", Date.now()); }
     }, { keepSidebar: true }],
     i: ["Toggle idle agents", () => setShared("agents.hideIdle", !shared("agents.hideIdle"))],
     g: ["Toggle grouping (buffer/status)", () => setShared("agents.sort", shared("agents.sort") === "grouped" ? "priority" : "grouped")],

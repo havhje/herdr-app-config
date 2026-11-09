@@ -199,10 +199,10 @@
                   }
                 },
                 {
-                  "id": "skills",
+                  "id": "context",
                   "type": "block",
                   "content": {
-                    "mod": "skills"
+                    "mod": "context"
                   }
                 }
               ]

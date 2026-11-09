@@ -8,7 +8,7 @@ Mods, glossary term → folder under `mods/`:
 - Explorer, Changes view → `explorer`
 - Links pane → `links`
 - Agents list → `agents-list`
-- Skills pane → `skills`
+- Context pane → `context`
 - Pane header → `pane-header`
 - Context menu → `context-menu`
 - Sidebar footer → `sidebar-footer`

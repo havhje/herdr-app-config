@@ -41,11 +41,11 @@ const shown = (h) => {
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "a", key_char: "a" }, h.cx);
   assert.deepEqual(shown(h), [
     "a Toggle agents",
+    "c Context of the focused agent",
     "d Kill agent (asks first)",
     "g Toggle grouping (buffer/status)",
     "i Toggle idle agents",
     "p Pin/unpin agent",
-    "s Skills of the focused agent",
   ]);
   ok("a group: sorted the same way");
 

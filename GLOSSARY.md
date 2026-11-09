@@ -77,16 +77,16 @@ The top bar listing every buffer by number and name, nothing to click.
 _Avoid_: tab bar, spaces list
 
 **Sidebar**:
-The right-hand column holding the agents list (or the skills pane in its place) and, when open, the leader menu.
+The right-hand column holding the agents list (or the context pane in its place) and, when open, the leader menu.
 _Avoid_: drawer, rail
 
 **Agents list**:
 Every agent in the sidebar, grouped by buffer or by status, pinned agents first.
 _Avoid_: inbox, agents panel
 
-**Skills pane**:
-The pane shown in the agents list's place listing the skills the last focused agent has, the ones the model sees first; `<leader>as`. Claude Code agents only so far.
-_Avoid_: skills panel, resource explorer (the pi extension it replaces in the Herdr app)
+**Context pane**:
+The pane shown in the agents list's place with what is in the last focused agent's context and what each part costs in tokens: the conversation, system prompt, tools, MCP, instructions, then the skills, loaded ones first (the whole skill is in the context), then the ones only described to the model; `<leader>ac`. Claude Code agents only so far.
+_Avoid_: skills pane (its first name), context panel, resource explorer (the pi extension it replaces in the Herdr app)
 
 **Sidebar footer**:
 The strip at the bottom of the sidebar; it shows a restart button once an app update is downloaded.
