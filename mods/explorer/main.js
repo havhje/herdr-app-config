@@ -282,9 +282,14 @@ export default class Explorer extends View {
   }
 
   // Opens a file in nvim in its own terminal window (Omarchy's default editor), outside Herdr.
+  // PDFs go to the default browser instead.
   edit(path, cx) {
     if (this.on) { this.say("nvim outside Herdr works for this computer's files only"); cx.notify(); return; }
     const full = `${this.root}/${path}`;
+    if (/\.pdf$/i.test(path)) {
+      cx.spawn(async () => { try { await exec("omarchy-launch-browser", [`file://${encodeURI(full)}`], { cwd: this.root }); } catch (e) { notify({ title: "Could not open browser", body: String(e), level: "error" }); } });
+      return;
+    }
     cx.spawn(async () => { try { await exec("omarchy-launch-editor", [full], { cwd: this.root }); } catch (e) { notify({ title: "Could not open nvim", body: String(e), level: "error" }); } });
   }
 
