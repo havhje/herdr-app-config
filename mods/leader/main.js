@@ -4,6 +4,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, spaces, panes, layout, shared, setShared, settings, focused, nextCommand, openOverlay } from "herdr";
 import { nextNeed, jumpBy, zen, killAgent, closeOtherTabs } from "./jump.js";
+import { commit } from "./commit.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -84,6 +85,8 @@ const TREE = {
   g: { label: "+git", keys: {
     // The explorer's changed-only view (gs in the explorer switches back).
     g: ["Git changes", () => { run("layout.select", { stack: "panel-body", child: "files" }); run("layout.show", { id: "panel" }); setShared("files.changed", Date.now()); }],
+    // An agent writes the message (mods/leader/commit.js): the pane's agent, else a headless one.
+    c: ["Commit and push (an agent writes the message)", (open) => commit(open)],
     w: ["New worktree", worktree("new")],
     o: ["Open worktree", worktree("open")],
     d: ["Remove worktree (deletes its folder)", worktree("remove")],

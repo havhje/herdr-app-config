@@ -53,6 +53,11 @@ const shown = (h) => {
   assert.deepEqual(shown(h), ["a Agent that needs me", "b Buffer", "t Tab"]);
   ok("å +prev: like nvim's [ (¨ +next the same)");
 
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "g", key_char: "g" }, h.cx);
+  assert.deepEqual(shown(h), ["c Commit and push (an agent writes the message)", "d Remove worktree (deletes its folder)", "g Git changes", "o Open worktree", "w New worktree"]);
+  ok("g +git: commit next to the changes view and the worktree keys");
+
   // LazyVim's <leader><tab>: tab is "tab" (Herdr's key name), shown as TAB.
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "tab" }, h.cx);
