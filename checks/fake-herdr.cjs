@@ -13,7 +13,7 @@
 // status is its most urgent agent's, blocked > done > working > idle, as herdr.d.ts says); shared/setShared;
 // run (recorded; pane/agent focus, space.select and layout show/hide/resize/select also change the world, and
 // `<mod>.<command>` reaches that mod's shown copies' nextCommand); notify/openOverlay (recorded); the shown layout;
-// exec (recorded in world.execs, answered by world.exec);
+// exec and hc (recorded in world.execs, answered by world.exec; hc as cmd "hc");
 // a theme whose every colour reads as its own name ("#working"); timers you flush by hand.
 // It knows nothing of any one mod: mod folders are named once, in MODS below.
 
@@ -23,7 +23,7 @@ const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
 // The mods and layout the checks are about. #13 renames these: change them here only.
-const MODS = { bufferline: "bufferline", explorer: "explorer", paneHeader: "pane-header", agentsList: "agents-list", leader: "leader" };
+const MODS = { bufferline: "bufferline", explorer: "explorer", links: "links", paneHeader: "pane-header", agentsList: "agents-list", leader: "leader" };
 const LAYOUT = "layouts/herdr_vim.json";
 
 // ---- gpui: every builder call is recorded on a node ----
@@ -200,7 +200,7 @@ function fakeHerdr(opts = {}) {
     setAgentOrder: () => null,
     // A check answers programs with world.exec(cmd, args, opts); every call is in world.execs.
     exec: async (cmd, args, opts) => { world.execs.push([cmd, copy(args), copy(opts ?? {})]); return world.exec?.(cmd, args, opts) ?? { code: 1, stdout: "", stderr: "" }; },
-    hc: async () => ({ code: 1, stdout: "", stderr: "" }),
+    hc: async (args) => { world.execs.push(["hc", copy(args), {}]); return world.exec?.("hc", args, {}) ?? { code: 1, stdout: "", stderr: "" }; },
     readTextFile: async () => null,
     watchFolder: () => new Promise(() => {}),
     home: () => "/home/me",
@@ -279,10 +279,10 @@ function fakeHerdr(opts = {}) {
   };
 
   // Loads mods/<name> as the app would: its main.js and what it imports from its own folder, in its own context.
-  function load(name, props = {}) {
+  // storage: a copy's localStorage; pass an earlier copy's (handle.storage) to load it as after a restart.
+  function load(name, props = {}, storage = new Map()) {
     const dir = path.join(ROOT, "mods", name);
     const queue = [], waiting = [];
-    const storage = new Map();
     const mine = {
       ...herdr,
       props: () => copy(props),
@@ -320,7 +320,7 @@ function fakeHerdr(opts = {}) {
     const view = new Mod();
     view.init?.(props, cx);
     const handle = {
-      name, view, props,
+      name, view, props, storage,
       render: () => snapshot(view.render(cx)),
       command(c) { if (waiting.length) waiting.shift()(c); else queue.push(c); },
     };

@@ -6,6 +6,7 @@ Mods, glossary term → folder under `mods/`:
 
 - Bufferline (and the tab row) → `bufferline`
 - Explorer, Changes view → `explorer`
+- Links pane → `links`
 - Agents list → `agents-list`
 - Pane header → `pane-header`
 - Context menu → `context-menu`

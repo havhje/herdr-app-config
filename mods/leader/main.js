@@ -17,6 +17,12 @@ const panel = (child) => () => {
   if (p && !p.hidden && body?.active === child) run("layout.hide", { id: "panel" });
   else { run("layout.select", { stack: "panel-body", child }); run("layout.show", { id: "panel" }); }
 };
+// The links pane, under the explorer in the side panel (mods/links): shown, hide it; else show it, and the panel with it.
+const links = () => {
+  const p = find(layout(), "panel"), l = find(layout(), "links");
+  if (p && !p.hidden && l && !l.hidden) run("layout.hide", { id: "links" });
+  else { run("layout.show", { id: "links" }); run("layout.show", { id: "panel" }); }
+};
 const cmd = (name, args) => () => run(name, args);
 const active = () => spaces().find((s) => s.active);
 // Herdr's worktree dialog (mods/worktree) for the shown buffer: new, open (pick a checkout) or remove.
@@ -99,7 +105,7 @@ const TREE = {
   u: { label: "+ui", keys: {
     s: ["Settings", cmd("app.settings")],
     m: ["Add machine", cmd("mod.open", { name: "machine-add" })],
-    l: ["Next layout", cmd("layout.switch")],
+    l: ["Links pane", links],
     C: ["Theme (colorscheme)", cmd("app.settings", { section: "look" })],
     z: ["Zen mode toggle", (open) => zen(open)],
   } },

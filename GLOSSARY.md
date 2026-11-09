@@ -104,6 +104,10 @@ _Avoid_: sidebar, drawer
 The file tree in the side panel, driven by nvim keys.
 _Avoid_: files panel, file browser, tree
 
+**Links pane**:
+The pane under the explorer listing the URLs and files (pages, pictures, pdfs, notes) the last focused agent printed, newest first; `<leader>ul`. `p` pins a link: pinned links stay on top for every agent and across restarts.
+_Avoid_: links panel, link list, resources
+
 **Changes view**:
 The explorer showing only changed files and their folders, each with lines added and removed; `gs` in the explorer or `<leader>gg` switches to it.
 _Avoid_: changes list, diff panel, git panel
