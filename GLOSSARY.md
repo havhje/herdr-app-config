@@ -119,7 +119,7 @@ _Avoid_: UI, controls, decoration
 ## How you drive it
 
 **Leader**:
-The key that starts every menu sequence: ctrl-space.
+The key that starts every menu sequence: ctrl-space. Caps Lock + Ø sends it too, from Hyprland (`~/.config/hypr/bindings.lua`), not `keys.json`.
 _Avoid_: prefix, hotkey
 
 **Leader menu**:
