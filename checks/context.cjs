@@ -2,7 +2,7 @@
 // whose it is: the agent (everything its own or only working there, gone with another agent), split in what I can
 // change (its tools, own skills and MCP servers) and what is fixed (system prompt; for Claude Code agent types and
 // session notes); my setup (my skills by who starts them: automatic, manual, off; instructions; my MCP servers,
-// tools and agent types) and last the conversation, the rest of the real context. For Claude Code from its session's
+// tools and agent types); the conversation is no part, only in the sum's real size. For Claude Code from its session's
 // transcript and, for the skills' files and the ones the model does not see, from disk; for Pi from its session
 // file's system messages; for Codex from what it prints as a new session's start, its system prompt, tools and
 // context size named as not readable. The dearest first at every level; parts unfold; follows the last focused agent; the
@@ -75,13 +75,13 @@ const USER = "/home/me/.claude/skills";
   const at = async (id) => { pane.view.cursor = id; await draw(); };
   // The rows drawn under a part's line (the first so named, or the first after a top part's line).
   const under = async (label, group) => { const l = await listed(true), from = group ? l.findIndex((x) => x.startsWith(`== ${group}`)) : -1, i = l.findIndex((x, j) => j > from && x.startsWith(`== ${label}`)), end = l.findIndex((x, j) => j > i && x.startsWith("== ")); return l.slice(i + 1, end < 0 ? l.length : end); };
-  assert.deepEqual(await listed(true), ["== Your setup 7 ~30", "== Skills 7 ~30", "== Automatic 5 ~30", "== Manual (/name) 2"]);
+  assert.deepEqual(await listed(true), ["== Your setup ~30", "== Skills ~30", "== Automatic ~30", "== Manual (/name)"]);
   await at("setup/skills/auto");
   await press("enter");
   assert.deepEqual(await listed(true), [
-    "== Your setup 7 ~30", "== Skills 7 ~30",
-    "== Automatic 5 ~30", "tdd ~13", "gone ~6", "deploy [repo] ~5", "no-header [claude only] ~4", "quiet [name only] ~2",
-    "== Manual (/name) 2",
+    "== Your setup ~30", "== Skills ~30",
+    "== Automatic ~30", "tdd ~13", "gone ~6", "deploy [repo] ~5", "no-header [claude only] ~4", "quiet [name only] ~2",
+    "== Manual (/name)",
   ]);
   assert.deepEqual(strings(find(await draw(), "context-sum")), ["~30 tokens", "no session found: loaded unknown"]);
   ok("no session found: the disk's skills under my setup, split by who starts them: automatic ones with their descriptions' tokens (characters / 4), dearest first, and manual ones; the header's and the settings' say (local, then repo, then mine) decide; one not in the shared ~/.agents/skills is marked");
@@ -92,7 +92,7 @@ const USER = "/home/me/.claude/skills";
 
   assert.ok(strings(find(await draw(), "context-h-setup/skills/manual")).includes("▸") && strings(find(await draw(), "context-h-setup/skills/auto")).includes("▾"));
   await press("G", "enter");
-  assert.deepEqual((await listed()).slice(-3), ["== Manual (/name) 2", "brandkit", "grill-me"]);
+  assert.deepEqual((await listed()).slice(-3), ["== Manual (/name)", "brandkit", "grill-me"]);
   ok("enter on a folded part's line unfolds it");
   await press("G");
   assert.ok((await told()).includes("Grill the user"));
@@ -100,11 +100,11 @@ const USER = "/home/me/.claude/skills";
   assert.ok((await told()).includes("Brand rules, folded over lines."), (await told()).join(" | "));
   assert.ok((await told()).includes("~/.claude/skills/brandkit/SKILL.md") && (await told()).includes("not in the context"), (await told()).join(" | "));
   await press("g", "g");
-  assert.ok((await told()).includes("~30 tokens · 7 rows"), (await told()).join(" | "));
+  assert.ok((await told()).includes("7 rows") && !(await told()).some((x) => x.includes("~30")), (await told()).join(" | "));
   await press("j", "j", "j");
   assert.ok((await told()).includes("Test-driven development. Use it: test-first."));
   assert.ok((await told()).includes("description ~13 · not loaded"));
-  ok("j/k, gg/G move over parts and rows; the line's description, tokens and file show under the list; my skill wins over the repo's of the same name");
+  ok("j/k, gg/G move over parts and rows; under the list the line's description, a part's rows, a skill's tokens by description and body, and its file, not the tokens its line shows; my skill wins over the repo's of the same name");
 
   h.world.execs.length = 0;
   await press("enter");
@@ -121,7 +121,7 @@ const USER = "/home/me/.claude/skills";
 
   h.world.execs.length = 0;
   h.focusPane("p2");
-  const beta = ["== Your setup 6", "== Skills 6", "== Automatic 3", "tdd", "no-header [claude only]", "quiet [name only]", "== Manual (/name) 2", "brandkit", "grill-me", "== Off 1"];
+  const beta = ["== Your setup", "== Skills", "== Automatic", "tdd", "no-header [claude only]", "quiet [name only]", "== Manual (/name)", "brandkit", "grill-me", "== Off"];
   assert.deepEqual(await listed(), beta);
   assert.deepEqual(plain(reads().map(([, a]) => [a[3], a[4]])), [["/work/beta", "t2"]]);
   h.focusPane("px");
@@ -157,21 +157,21 @@ const USER = "/home/me/.claude/skills";
     assert.ok((await told()).includes("Skill 0."), (await told()).join(" | "));
     ok("h on a row goes to its part's line; l on an unfolded part steps into it");
     await press("h", "h");
-    assert.deepEqual(await listed(), ["== Your setup 60", "== Skills 60", "== Automatic 60"]);
+    assert.deepEqual(await listed(), ["== Your setup", "== Skills", "== Automatic"]);
     await press("h");
     assert.ok((await told()).some((x) => x.startsWith("My skills")), (await told()).join(" | "));
     ok("h on an unfolded part's line folds it; on a folded one it goes to the part it is in");
     h.calls.length = 0;
     await press("h", "h", "h");
-    assert.deepEqual(await listed(), ["== Your setup 60"]);
+    assert.deepEqual(await listed(), ["== Your setup"]);
     await press("h");
-    assert.deepEqual(await listed(), ["== Your setup 60"]);
+    assert.deepEqual(await listed(), ["== Your setup"]);
     assert.deepEqual(h.calls, []);
     ok("h on a folded top part does nothing (the keyboard stays)");
     await press("right", "right", "l", "l", "l");
     assert.equal((await listed())[3], "s00");
     await press("left", "left");
-    assert.deepEqual(await listed(), ["== Your setup 60", "== Skills 60", "== Automatic 60"]);
+    assert.deepEqual(await listed(), ["== Your setup", "== Skills", "== Automatic"]);
     await press("escape");
     assert.deepEqual(plain(h.calls.at(-1)), ["pane.go", { direction: "left" }]);
     ok("right and left as l and h; esc: the keyboard to the terminals");
@@ -206,33 +206,29 @@ const USER = "/home/me/.claude/skills";
     // Folded again, as at first: the manual skills, unfolded above.
     await draw(); await at("setup/skills/manual"); await press("h");
     const whole = [
-      "== Claude Code 10 ~3.0k",
-      "== Configurable 8 ~1.9k", "== Skills 3 ~1.1k", "== Tools 2 ~576", "== MCP 3 ~165",
-      "== Fixed 2 ~1.1k", "== System prompt ~1.0k", "== Agent types 1 ~50", "== Session notes 1 ~50",
-      "== Your setup 13 ~1.9k",
-      "== Skills 6 ~1.1k", "== Automatic 3 ~1.0k", "== Manual (/name) 2 ~100", "== Off 1",
-      "== Instructions 2 ~400", "== MCP 4 ~309", "== Agent types 1 ~30",
-      "== Conversation ~95.2k",
+      "== Claude Code ~3.0k",
+      "== Configurable ~1.9k", "== Skills ~1.1k", "== Tools ~576", "== MCP ~165",
+      "== Fixed ~1.1k", "== System prompt ~1.0k", "== Agent types ~50", "== Session notes ~50",
+      "== Your setup ~1.9k",
+      "== Skills ~1.1k", "== Automatic ~1.0k", "== Manual (/name) ~100", "== Off",
+      "== Instructions ~400", "== MCP ~309", "== Agent types ~30",
     ];
     assert.deepEqual(await listed(true), whole);
     assert.deepEqual(plain(reads().map(([, a, o]) => [a[3], a[4], a[5], o])), [["/work/sess", "t5", "claude", { on: "vps" }]]);
-    assert.deepEqual(strings(find(await draw(), "context-sum")), ["100k context", "~4.8k without conversation"]);
-    assert.deepEqual(["setup", "setup/skills/manual", "agent/can/tools", "talk"].map((id) => strings(find(pane.render(), `context-h-${id}`)).at(-1)), ["2%", "<1%", "1%", "95%"]);
-    ok("a session found: a tree by whose it is, the dearest first at every level: Claude Code (what I can change: its tools, skills and MCP servers; what is fixed: system prompt, agent types, session notes), my setup, each part with its tokens and its share; last the conversation, the rest of the real context");
-
-    await at("talk");
-    assert.ok((await told()).includes("~95.2k tokens · 95.2%"), (await told()).join(" | "));
-    await press("l");
-    assert.deepEqual(await listed(true), whole);
+    assert.deepEqual(strings(find(await draw(), "context-sum")), ["~4.8k tokens", "100k with conversation"]);
+    // A line's share is of the part it is in (a top part's of the sum), so one level's shares add up to its part's.
+    assert.deepEqual(["agent", "setup", "agent/can", "agent/fixed", "setup/skills/manual", "agent/can/tools"].map((id) => strings(find(pane.render(), `context-h-${id}`)).at(-1)), ["62%", "38%", "63%", "37%", "9%", "31%"]);
+    ok("a session found: a tree by whose it is, the dearest first at every level: Claude Code (what I can change: its tools, skills and MCP servers; what is fixed: system prompt, agent types, session notes), my setup, each part with its tokens and its share of the sum; the conversation is no part, only the sum's real size");
     await at("agent/can/tools"); await press("l");
     assert.deepEqual(await under("Tools"), ["Bash ~500", "names of deferred tools [1] ~76"]);
-    assert.ok((await told()).includes("~576 tokens · 0.6% · 2 rows"), (await told()).join(" | "));
+    assert.ok((await told()).includes("2 rows") && !(await told()).some((x) => x.includes("~576")), (await told()).join(" | "));
+    assert.deepEqual(strings(find(pane.render(), "context-row-agent/can/tools/Bash")).slice(-2), ["~500", "87%"]);
     await at("setup/mcp"); await press("l", "l", "l");
     const servers = async () => (await listed(true)).filter((x) => /^== (my docs|mail|claude)/.test(x));
-    assert.deepEqual(await servers(), ["== my docs 3 ~305", "== mail 1 ~4"]);
+    assert.deepEqual(await servers(), ["== my docs ~305", "== mail ~4"]);
     assert.deepEqual(await under("my docs"), ["read [tool] ~200", "instructions ~100", "names of deferred tools [1] ~5"]);
     await at("agent/can/mcp"); await press("l", "l", "l");
-    assert.deepEqual(await servers(), ["== claude.ai Gmail 2 ~157", "== claude-in-chrome 1 ~8", "== my docs 3 ~305", "== mail 1 ~4"]);
+    assert.deepEqual(await servers(), ["== claude.ai Gmail ~157", "== claude-in-chrome ~8", "== my docs ~305", "== mail ~4"]);
     assert.deepEqual(await under("claude.ai Gmail"), ["instructions ~150", "names of deferred tools [1] ~7"]);
     await press("h", "h", "h");
     ok("MCP by whose: the claude.ai connectors and Claude in Chrome under Claude Code (configurable), the servers I set up under my setup");
@@ -242,7 +238,7 @@ const USER = "/home/me/.claude/skills";
     ok("agent types by whose: the built-in ones under Claude Code (fixed), the ones I added under my setup");
     await at("setup/instructions"); await press("l", "l");
     assert.deepEqual(await under("Instructions"), ["~/.claude/CLAUDE.md [user] ~300", "/work/real/CLAUDE.md [project] ~100"]);
-    assert.ok((await told()).includes("~300 tokens · 0.3%") && (await told()).includes("~/.claude/CLAUDE.md"), (await told()).join(" | "));
+    assert.ok((await told()).includes("~/.claude/CLAUDE.md") && !(await told()).some((x) => x.includes("~300")), (await told()).join(" | "));
     h.world.execs.length = 0; h.notes.length = 0;
     await press("enter");
     assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /another machine/);
@@ -267,7 +263,7 @@ const USER = "/home/me/.claude/skills";
 
     const EXTRAS = "Configurable";
     await at("agent/can/skills"); await press("l");
-    assert.deepEqual((await listed(true)).slice(2, 5), ["== Skills 3 ~1.1k", "== Automatic 2 ~1.0k", "== Manual (/name) 1 ~100"]);
+    assert.deepEqual((await listed(true)).slice(2, 5), ["== Skills ~1.1k", "== Automatic ~1.0k", "== Manual (/name) ~100"]);
     await at("agent/can/skills/manual"); await press("l");
     assert.deepEqual(await under("Manual", EXTRAS), ["docx [loaded] ~100"]);
     await press("h"); await at("agent/can/skills/auto"); await press("l");
@@ -298,8 +294,8 @@ const USER = "/home/me/.claude/skills";
     disk["/work/sess"] = T("/work/real", [rows[0], rows[9], NOTE({ type: "environment" }, 4000), { type: "system", subtype: "compact_boundary" }, NOTE({ type: "environment" }, 200),
       NOTE({ type: "invoked_skills", skills: [{ name: "grill-me", path: "userSettings:grill-me", content: "x".repeat(800) }, { name: "init", path: "bundled:init", content: "x".repeat(400) }] })], '"usage":{"input_tokens":50000') + user;
     await press("r");
-    assert.deepEqual(await listed(true), ["== Your setup 6 ~213", "== Skills 6 ~213", "== Manual (/name) 2 ~200", "== Automatic 3 ~13", "== Off 1", "== Claude Code 4 ~169", "== Configurable 3 ~119", "== Skills 3 ~119", "== Fixed 1 ~50", "== Session notes 1 ~50", "== Conversation ~49.6k"]);
-    assert.deepEqual(strings(find(await draw(), "context-sum")), ["50.0k context", "~382 without conversation · compacted"]);
+    assert.deepEqual(await listed(true), ["== Your setup ~213", "== Skills ~213", "== Manual (/name) ~200", "== Automatic ~13", "== Off", "== Claude Code ~169", "== Configurable ~119", "== Skills ~119", "== Fixed ~50", "== Session notes ~50"]);
+    assert.deepEqual(strings(find(await draw(), "context-sum")), ["~382 tokens", "50.0k with conversation · compacted"]);
     ok("after a compaction: only the bodies kept through it are loaded (a bundled one is Claude Code's), and the notes sent again replace the old");
 
     disk["/work/sess"] = T("/work/real", []) + user;
@@ -334,16 +330,15 @@ const USER = "/home/me/.claude/skills";
     h.world.execs.length = 0;
     h.focusPane("p6");
     assert.deepEqual(await listed(true), [
-      "== Your setup 7 ~1.3k",
-      "== Skills 3 ~750", "== Automatic 2 ~650", "== Manual (/name) 1 ~100",
-      "== Extension tools 2 ~300", "== Instructions 1 ~200", "== MCP 1 ~10",
-      "== Pi 5 ~330",
-      "== Fixed 4 ~230", "== System prompt 4 ~230", "== Configurable 1 ~100", "== Tools 1 ~100",
-      "== Conversation ~18.4k",
+      "== Your setup ~1.3k",
+      "== Skills ~750", "== Automatic ~650", "== Manual (/name) ~100",
+      "== Extension tools ~300", "== Instructions ~200", "== MCP ~10",
+      "== Pi ~330",
+      "== Fixed ~230", "== System prompt ~230", "== Configurable ~100", "== Tools ~100",
     ]);
     assert.deepEqual(plain(reads().map(([, a, o]) => [a[3], a[4], a[5], o])), [["/work/pi", "t6", "pi", {}]]);
-    assert.deepEqual(strings(find(await draw(), "context-sum")), ["20.0k context", "~1.6k without conversation"]);
-    ok("Pi: the same tree from its session file: my setup (skills, the extensions' tools, instructions, MCP), Pi (fixed: system prompt; configurable: built-in tools); last the conversation");
+    assert.deepEqual(strings(find(await draw(), "context-sum")), ["~1.6k tokens", "20.0k with conversation"]);
+    ok("Pi: the same tree from its session file: my setup (skills, the extensions' tools, instructions, MCP), Pi (fixed: system prompt; configurable: built-in tools)");
 
     await at("setup/skills/auto"); await press("l");
     assert.deepEqual(await under("Automatic"), ["tdd [loaded] ~600", "notes [pi only] ~50"]);
@@ -370,7 +365,7 @@ const USER = "/home/me/.claude/skills";
 
     disk["/work/pi"] = PI([...rows, { type: "compaction" }]);
     await press("r");
-    assert.deepEqual(strings(find(await draw(), "context-sum")), ["20.0k context", "~1.6k without conversation · compacted"]);
+    assert.deepEqual(strings(find(await draw(), "context-sum")), ["~1.6k tokens", "20.0k with conversation · compacted"]);
     disk["/work/pi"] = "";
     await press("r");
     assert.ok(strings(find(await draw(), "context-list")).includes("Nothing found"));
@@ -396,10 +391,10 @@ const USER = "/home/me/.claude/skills";
     h.world.execs.length = 0;
     h.focusPane("p7");
     assert.deepEqual(await listed(true), [
-      "== Your setup 3 ~850",
-      "== Skills 2 ~650", "== Automatic 2 ~650", "== Instructions 1 ~200",
-      "== Codex 7 ~350",
-      "== Fixed 3 ~250", "== Session notes 3 ~250", "== Configurable 1 ~100", "== Skills 1 ~100", "== Not readable 3",
+      "== Your setup ~850",
+      "== Skills ~650", "== Automatic ~650", "== Instructions ~200",
+      "== Codex ~350",
+      "== Fixed ~250", "== Session notes ~250", "== Configurable ~100", "== Skills ~100", "== Not readable",
     ]);
     assert.deepEqual(plain(reads().map(([, a, o]) => [a[3], a[4], a[5], o])), [["/work/cx", "t7", "codex", {}]]);
     assert.deepEqual(strings(find(await draw(), "context-sum")), ["~1.2k readable", "a new session's start · size not recorded"]);

@@ -3,11 +3,14 @@
 // only works there, gone with another agent), split in Configurable (switched off or changed with its settings
 // or flags: its tools, its own skills and MCP servers) and Fixed (sent whatever my settings say: the system
 // prompt, for Claude Code its agent types and session notes too); my setup (what I added myself and could take to
-// another agent: my skills, instruction files, the MCP servers, tools and agent types I set up); and last the
-// conversation. Skills are split by who starts them: automatic (the agent is given the description and may load the
-// skill itself), manual (only I run it, by /name) and off; a loaded one (the whole SKILL.md is in the context) is
-// marked. Tokens are characters / 4, an estimate; the context's size is the real one from the last turn, and the
-// conversation is what is left of it after the other parts.
+// another agent: my skills, instruction files, the MCP servers, tools and agent types I set up). The conversation
+// is not a part: it grows by itself and is not mine to trim, so it is only in the sum's real size. Skills are split
+// by who starts them: automatic (the agent is given the description and may load the skill itself), manual (only I
+// run it, by /name) and off; a loaded one (the whole SKILL.md is in the context) is marked. Tokens are characters / 4,
+// an estimate; the context's size is the real one from the last turn.
+// Every number is shown once. The sum, on top: the parts' tokens together and, dim, the real size with the
+// conversation. A line: its tokens and its share of the part it is in (a top part's of the sum). Under the list, the cursor's line: only what its
+// line does not say (what it is, a part's rows, a skill's tokens by description and body, its file).
 // Whose a skill is: mine when its SKILL.md is in a skills folder of mine. The shared folder is ~/.agents/skills (every
 // agent's skills are linked from there); one only in the agent's own folder (~/.claude/skills/<name>, a --skill
 // folder of Pi's) is mine too, marked "claude only" / "pi only"; a repo's is marked "repo". The rest are the
@@ -196,7 +199,7 @@ const agentOf = (p) => KEYS[p?.app] ?? KEYS[p?.program?.key] ?? null;
 export const tokens = (text) => Math.ceil((text ?? "").length / 4);
 export const about = (n) => n < 1000 ? `~${n}` : `~${(n / 1000).toFixed(n < 99950 ? 1 : 0)}k`;
 const sum = (list, of) => list.reduce((n, x) => n + of(x), 0);
-// A part's share of the context, for its line: whole percent.
+// A line's share of what holds it: whole percent.
 const percent = (n, of) => { const x = 100 * n / of; return x < 0.5 ? "<1%" : `${Math.round(x)}%`; };
 const short = (path) => (path ?? "").replace(/^\/home\/[^/]+/, "~");
 
@@ -451,7 +454,7 @@ function codexParts(seen) {
 // What the read printed for that agent, as { tree, session }. tree: the context as parts by whose they are, dearest
 // first at every level: the agent (what I can change: its tools, own skills and MCP servers; what is fixed: the
 // system prompt, for Claude Code agent types and session notes), my setup (my skills, instruction files, my MCP
-// servers, tools and agent types), and last the conversation, what is left of the real context. Skills are split
+// servers, tools and agent types). Skills are split
 // into automatic, manual and off; MCP is by server. A node: { name, tokens, note, description, detail, file, kids },
 // a part also { key, part, count }, a skill also { mine, kind, loaded, listed, body, times, how }.
 // session: null when none was found, else { cwd, listing (the model's own skill list was read), context (the last
@@ -495,7 +498,6 @@ export function accountIn(stdout, agent = "claude") {
   ]));
   const n = (...keys) => sum(keys, (key) => Number(new RegExp(`"${key}":(\\d+)`).exec(usage)?.[1] ?? 0));
   const context = pi ? n("input", "cacheRead", "cacheWrite") : n("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens");
-  if (context) tree.push(part("talk", "Conversation", "What was said, called and returned since the last compaction: the context's real size less the parts above. It grows with every turn.", [], Math.max(0, context - sum(tree, (g) => g.tokens))));
   return { tree, session: seen ? { cwd: seen.cwd, listing: Boolean(seen?.listed.size), context: context || null, compacted: seen.compacted, preview: codex } : null };
 }
 
@@ -546,16 +548,18 @@ export default class Context extends View {
   }
 
   // The followed agent's context as the lines drawn: the tree's nodes, a part's kids under it when it is unfolded.
-  // Each { id (the cursor's name for it: the keys down to it), node, depth, parent (its part's id) }.
+  // Each { id (the cursor's name for it: the keys down to it), node, depth, parent (its part's id), of (the tokens its
+  // share is of: its part's, a top part's the sum's) }.
   lines(p) {
-    const out = [], walk = (nodes, depth, parent) => {
+    const tree = this.lists.get(this.keyOf(p))?.tree ?? [];
+    const out = [], walk = (nodes, depth, parent, of) => {
       for (const node of nodes) {
         const id = `${parent ? parent + "/" : ""}${node.key ?? node.name}`;
-        out.push({ id, node, depth, parent });
-        if (node.kids.length && this.open.has(id)) walk(node.kids, depth + 1, id);
+        out.push({ id, node, depth, parent, of });
+        if (node.kids.length && this.open.has(id)) walk(node.kids, depth + 1, id, node.tokens);
       }
     };
-    walk(this.lists.get(this.keyOf(p))?.tree ?? [], 0, null);
+    walk(tree, 0, null, sum(tree, (g) => g.tokens));
     return out;
   }
 
@@ -625,9 +629,8 @@ export default class Context extends View {
     if (here && key && (fresh || stopped || key !== this.shown || (!this.lists.has(key) && !this.failed.has(key)))) { this.shown = key; this.load(p, cx); }
     this.status = p?.status ?? null;
     const got = this.lists.get(key), session = got?.session ?? null, tree = got?.tree ?? [];
-    const rest = sum(tree.filter((g) => g.key !== "talk"), (g) => g.tokens);
-    const share = (n) => session?.context ? `${(100 * n / session.context).toFixed(1)}%` : "";
-    const [size, side] = !got ? ["", ""] : session?.preview ? [`${about(rest)} readable`, "a new session's start · size not recorded"] : session?.context ? [`${about(session.context).slice(1)} context`, `${about(rest)} without conversation${session.compacted ? " · compacted" : ""}`]
+    const rest = sum(tree, (g) => g.tokens);
+    const [size, side] = !got ? ["", ""] : session?.preview ? [`${about(rest)} readable`, "a new session's start · size not recorded"] : session?.context ? [`${about(rest)} tokens`, `${about(session.context).slice(1)} with conversation${session.compacted ? " · compacted" : ""}`]
       : [`${about(rest)} tokens`, !session ? "no session found: loaded unknown" : "no turn yet: loaded unknown"];
     const focusedNow = this.handle.is_focused(), lines = this.lines(p);
     const sel = Math.max(0, lines.findIndex((l) => l.id === this.cursor)), cur = lines[sel] ?? null;
@@ -638,25 +641,27 @@ export default class Context extends View {
     if (sel >= this.top + fit) this.top = sel - fit + 1;
     this.top = Math.max(0, Math.min(this.top, Math.max(0, lines.length - fit)));
     const pick = (l) => (_ev, cx) => { this.cursor = l.id; this.handle.focus(); if (l.node.part) this.fold(l, cx); cx.notify(); };
-    // A part's line: an arrow, its name, the rows under it, its tokens and its share of the context. A row's: its name,
-    // a note, its tokens. Each level a step further in.
+    // A part's line: an arrow, its name, its tokens and its share of the part it is in (a top part's of the sum, so
+    // the shares on one level add up to its part's). A row's: its name, a note, its tokens and share. Each level a
+    // step further in, and the name and tokens follow: a top part's bold, the next level's plain, deeper ones dim.
+    const cost = (l, color) => (el) => el.child(div().flex_none().w(46).text_right().text_size(11).text_color(l.depth > 1 ? t.dim : color).when(l.depth === 0, (el) => el.font_semibold()).child(about(l.node.tokens)))
+      .child(div().flex_none().w(28).text_right().text_size(11).text_color(t.dim).child(percent(l.node.tokens, l.of)));
     const line = (l) => { const n = l.node; return n.part
       ? h_flex().id(`context-h-${l.id}`).h(ROW).flex_none().pl(8 + l.depth * INDENT).pr(8).gap(6).items_center().rounded(6).cursor_pointer()
         .when(focusedNow && l === cur, (el) => el.bg(t.hover)).hover((s) => s.bg(t.hover)).on_click(pick(l))
         .child(div().flex_none().w(10).text_size(10).text_color(t.dim).child(!n.kids.length ? "" : this.open.has(l.id) ? "▾" : "▸"))
-        .child(div().flex_1().min_w(0).truncate().when(l.depth < 2, (el) => el.font_semibold()).child(n.name))
-        .when(n.count > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(String(n.count))))
-        .when(n.tokens > 0, (el) => el.child(div().flex_none().w(46).text_right().text_size(11).child(about(n.tokens))))
-        .when(n.tokens > 0 && Boolean(session?.context), (el) => el.child(div().flex_none().w(28).text_right().text_size(11).text_color(t.dim).child(percent(n.tokens, session.context))))
+        .child(div().flex_1().min_w(0).truncate().when(l.depth === 0, (el) => el.font_semibold()).text_color(l.depth > 1 ? t.muted : t.foreground).child(n.name))
+        .when(n.tokens > 0, cost(l, t.foreground))
       : h_flex().id(`context-row-${l.id}`).h(ROW).flex_none().pl(8 + l.depth * INDENT).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
         .when(focusedNow && l === cur, (el) => el.bg(t.hover)).hover((s) => s.bg(t.hover)).on_click(pick(l))
         .child(div().flex_1().min_w(0).truncate().text_color(n.tokens ? t.foreground : t.muted).child(n.name))
         .when(Boolean(n.note), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(n.note)))
-        .when(n.tokens > 0, (el) => el.child(div().flex_none().w(46).text_right().text_size(11).text_color(n.loaded ? t.foreground : t.dim).child(about(n.tokens)))); };
-    // Under the list, the cursor's line: what it is, its tokens and its file.
+        .when(n.tokens > 0, cost(l, n.loaded ? t.foreground : t.dim)); };
+    // Under the list, the cursor's line, what its line does not say: what it is, a part's rows, a skill's tokens by
+    // description and body, its file.
     const at = cur?.node, told = !at ? [] : !at.part
-      ? [at.description || "No description", [at.detail || (at.tokens ? `${about(at.tokens)} tokens` : ""), at.detail ? "" : share(at.tokens)].filter(Boolean).join(" · "), at.file ? short(at.file) : ""]
-      : [at.description, [at.tokens ? `${about(at.tokens)} tokens` : "not in the context", at.tokens ? share(at.tokens) : "", at.count ? `${at.count} rows` : ""].filter(Boolean).join(" · "), ""];
+      ? [at.description || "No description", at.detail, at.file ? short(at.file) : ""]
+      : [at.description, [at.tokens ? "" : "not in the context", at.count ? `${at.count} rows` : ""].filter(Boolean).join(" · "), ""];
     const empty = !p ? "No agent focused yet"
       : !key ? `Read for ${Object.values(AGENTS).join(", ")} only so far, not ${p.program?.name ?? p.app ?? "this agent"}`
       : this.failed.has(key) ? "Could not read the context (r tries again)"
@@ -667,7 +672,7 @@ export default class Context extends View {
         .child(div().font_semibold().child("Context"))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(p?.terminal ?? "")))
       .when(Boolean(got), (el) => el.child(h_flex().id("context-sum").h(SUM).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border).text_size(12)
-        .child(div().flex_none().child(size))
+        .child(div().flex_none().font_semibold().child(size))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(11).text_color(t.dim).child(side))))
       .child(v_flex().id("context-list").flex_1().min_h(0).p(PAD).overflow_hidden().font_family(settings().font ?? "JetBrains Mono").text_size(12)
         // The wheel moves the cursor, a line per row's height: the lines drawn follow the cursor.
