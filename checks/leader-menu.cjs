@@ -45,6 +45,7 @@ const shown = (h) => {
     "g Toggle grouping (buffer/status)",
     "i Toggle idle agents",
     "p Pin/unpin agent",
+    "s Skills of the focused agent",
   ]);
   ok("a group: sorted the same way");
 

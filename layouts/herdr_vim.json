@@ -183,15 +183,29 @@
           "type": "column",
           "children": [
             {
-              "id": "agents",
-              "type": "block",
+              "id": "sidebar-body",
+              "type": "stack",
+              "active": "agents",
               "size": {
                 "weight": 1
               },
               "min": 90,
-              "content": {
-                "mod": "agents-list"
-              }
+              "children": [
+                {
+                  "id": "agents",
+                  "type": "block",
+                  "content": {
+                    "mod": "agents-list"
+                  }
+                },
+                {
+                  "id": "skills",
+                  "type": "block",
+                  "content": {
+                    "mod": "skills"
+                  }
+                }
+              ]
             },
             {
               "id": "leader",
