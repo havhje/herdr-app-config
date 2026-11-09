@@ -16,8 +16,9 @@
 // user-invocable-only or off (settings.local.json, then the repo's settings.json, then ~/.claude/settings.json);
 // the session's own listing wins over that.
 // Read when the pane is opened, when another agent is followed and when the followed agent stops working; r reads again.
-// Keys as nvim: j/k, gg/G, enter/l unfolds a part or opens a row's file in nvim, r reloads, q back to the agents list,
-// esc/h back to the terminals. <leader>ac shows it and puts it away.
+// Keys as the explorer's: j/k, ctrl-d/ctrl-u half a page, gg/G, l (enter, right) unfolds a part, steps into an unfolded
+// one or opens a row's file in nvim (its own terminal window, as the explorer does), h (left) folds a part or goes from a row to its part. r reloads, q back to the
+// agents list, esc back to the terminals. <leader>ac shows it and puts it away.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { focused, panes, layout, exec, theme, settings, shared, nextCommand, run, notify } from "herdr";
@@ -173,6 +174,8 @@ function skillsIn(found, over, seen) {
       ?? [...byName.keys()].find((n) => n === base || n.endsWith(`:${base}`)) ?? base;
     if (!byName.has(name)) byName.set(name, { name, description: "", file: b.dir ? `${b.dir}/SKILL.md` : null, group: "model", note: "", listed: null, body: 0, times: 0, how: "" });
     const s = byName.get(name);
+    // A plugin's skill is not among the disk's: its file is known once it is loaded, from the folder the body names.
+    if (!s.file && b.dir) s.file = `${b.dir}/SKILL.md`;
     s.body += b.tokens; s.times++; s.how = b.how; s.group = "loaded";
   }
   // A row's tokens, part by part.
@@ -264,7 +267,7 @@ const isClaude = (p) => p?.app === "claude-code" || p?.program?.key === "claude"
 export default class Context extends View {
   init(_props, cx) {
     this.handle = cx.focus_handle();
-    this.agent = null; this.cursor = null; this.g = 0; this.top = 0; this.height = 600; this.wheel = 0;
+    this.agent = null; this.cursor = null; this.g = 0; this.top = 0; this.height = 600; this.fit = 16; this.wheel = 0;
     this.lists = new Map(); this.loading = new Set(); this.failed = new Set(); this.shown = null; this.status = null;
     this.open = new Set();
     cx.spawn(async (cx) => { for (;;) { if (await nextCommand() === "focus") { this.handle.focus(); cx.notify(); } } });
@@ -306,7 +309,8 @@ export default class Context extends View {
   openFile(item, p) {
     if (!item.file) return notify({ title: `No file known for ${item.name}`, body: "Not a file on disk (a plugin's or a built-in part)", level: "info", timeout: 2500 });
     if (machine(p?.terminal)) return notify({ title: "That file is on another machine", body: item.file, level: "info", timeout: 2500 });
-    exec("omarchy-launch-editor", [item.file])
+    // As the explorer: nvim in its own terminal window, outside Herdr, started in the agent's folder.
+    exec("omarchy-launch-editor", [item.file], { cwd: this.lists.get(this.keyOf(p))?.session?.cwd || p?.cwd || undefined })
       .then((r) => { if (r.code !== 0) throw new Error(r.stderr.trim() || "omarchy-launch-editor failed"); })
       .catch((err) => notify({ title: `Could not open ${item.name}`, body: String(err.message ?? err), level: "error" }));
   }
@@ -333,16 +337,27 @@ export default class Context extends View {
 
   key(e, cx) {
     const k = e.keystroke, p = this.follow(), { list, i } = this.at(p), line = list[i];
-    const move = (n) => this.move(p, n, cx);
+    const move = (n) => this.move(p, n, cx), page = Math.max(1, Math.floor(this.fit / 2));
     const g = this.g; this.g = 0;
     if (k === "j" || k === "down") move(i + 1);
     else if (k === "k" || k === "up") move(i - 1);
+    else if (k === "ctrl-d") move(i + page);
+    else if (k === "ctrl-u") move(i - page);
     else if (e.key_char === "G" || k === "shift-g") move(list.length - 1);
     else if (k === "g") { if (g && Date.now() - g < 600) move(0); else this.g = Date.now(); }
-    else if ((k === "enter" || k === "l") && line) { if (line.item) this.openFile(line.item, p); else this.fold(line.group, cx); }
+    // As the explorer's tree: l opens a row's file, unfolds a part, or steps into an unfolded one; h folds a part, or
+    // goes from a row to its part.
+    else if ((k === "l" || k === "enter" || k === "right") && line) {
+      if (line.item) this.openFile(line.item, p);
+      else if (!this.open.has(line.group.key)) this.fold(line.group, cx);
+      else move(i + 1);
+    } else if ((k === "h" || k === "left") && line) {
+      if (line.item) move(list.findIndex((l) => l.id === `#${line.group.key}`));
+      else if (this.open.has(line.group.key)) this.fold(line.group, cx);
+    }
     else if (k === "r") this.load(p, cx);
     else if (k === "q") { run("layout.select", { stack: "sidebar-body", child: "agents" }); run("pane.go", { direction: "left" }); }
-    else if (k === "escape" || k === "h" || k === "left") run("pane.go", { direction: "left" });
+    else if (k === "escape") run("pane.go", { direction: "left" });
     else return;
     cx.stop_propagation();
   }
@@ -364,6 +379,7 @@ export default class Context extends View {
     const sel = Math.max(0, lines.findIndex((l) => l.id === this.cursor)), cur = lines[sel] ?? null;
     // Only the lines that fit are drawn, moved to keep the cursor's in view (its part's line too, when it is the line above).
     const fit = Math.max(1, Math.floor((this.height - HEAD - (got ? SUM : 0) - (cur ? ABOUT : 0) - FOOT - 2 * PAD - 2) / ROW)), first = sel > 0 && !lines[sel - 1].item ? sel - 1 : sel;
+    this.fit = fit;
     if (first < this.top) this.top = Math.max(0, first);
     if (sel >= this.top + fit) this.top = sel - fit + 1;
     this.top = Math.max(0, Math.min(this.top, Math.max(0, lines.length - fit)));
@@ -408,6 +424,6 @@ export default class Context extends View {
         .child(div().flex_1().min_h(0).overflow_hidden().text_color(t.muted).child(told[0].slice(0, 600)))
         .when(Boolean(told[1]), (el) => el.child(div().flex_none().truncate().text_size(11).child(told[1])))
         .when(Boolean(told[2]), (el) => el.child(div().flex_none().overflow_hidden().whitespace_nowrap().text_ellipsis_start().text_size(11).text_color(t.dim).child(told[2])))))
-      .child(h_flex().h(FOOT).flex_none().items_center().px(12).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child("j/k  ⏎ unfold, open  r reload  q agents"));
+      .child(h_flex().h(FOOT).flex_none().items_center().px(12).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child("j/k  h/l fold, open  r reload  q agents"));
   }
 }

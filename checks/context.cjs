@@ -82,7 +82,7 @@ const USER = "/home/me/.claude/skills";
   assert.ok(strings(find(await draw(), "context-h-you")).includes("▸") && strings(find(await draw(), "context-h-model")).includes("▾"));
   await press("G", "enter");
   assert.deepEqual((await listed()).slice(-3), ["== Skills only you run (/name) 2", "brandkit", "grill-me"]);
-  ok("enter on a part's line unfolds it (and folds it again)");
+  ok("enter on a folded part's line unfolds it");
   await press("G");
   assert.ok((await told()).includes("Grill the user"));
   await press("k");
@@ -97,8 +97,11 @@ const USER = "/home/me/.claude/skills";
 
   h.world.execs.length = 0;
   await press("enter");
+  assert.deepEqual(plain(h.world.execs), [["omarchy-launch-editor", [`${USER}/tdd/SKILL.md`], { cwd: "/work/alpha/src" }]]);
+  h.world.execs.length = 0;
+  await press("l");
   assert.deepEqual(plain(h.world.execs.map(([c, a]) => [c, a])), [["omarchy-launch-editor", [`${USER}/tdd/SKILL.md`]]]);
-  ok("enter on a skill opens its SKILL.md in nvim");
+  ok("enter or l on a skill opens its SKILL.md in nvim (its own terminal window, as the explorer), started in the agent's folder");
 
   disk["/work/alpha/src"] = user;
   await press("r");
@@ -130,6 +133,32 @@ const USER = "/home/me/.claude/skills";
     await press("G");
     assert.equal((await listed()).at(-1), "s59");
     ok("a long list: draws what fits, moved to keep the cursor's line in view");
+
+    // The explorer's keys. 14 lines fit here, so half a page is 7.
+    await press("ctrl-u");
+    assert.ok((await told()).includes("Skill 52."), (await told()).join(" | "));
+    await press("ctrl-d", "ctrl-d");
+    assert.ok((await told()).includes("Skill 59."), (await told()).join(" | "));
+    ok("ctrl-u and ctrl-d move half a page, stopping at the ends");
+    await press("h");
+    assert.ok((await told()).some((x) => x.endsWith("60 rows")), (await told()).join(" | "));
+    await press("l");
+    assert.ok((await told()).includes("Skill 0."), (await told()).join(" | "));
+    ok("h on a row goes to its part's line; l on an unfolded part steps into it");
+    await press("h", "h");
+    assert.deepEqual(await listed(), ["== Skills the model sees 60"]);
+    h.calls.length = 0;
+    await press("h");
+    assert.deepEqual(await listed(), ["== Skills the model sees 60"]);
+    assert.deepEqual(h.calls, []);
+    ok("h on an unfolded part's line folds it; on a folded one it does nothing (the keyboard stays)");
+    await press("right");
+    assert.equal((await listed())[1], "s00");
+    await press("left", "left", "l");
+    assert.equal((await listed())[1], "s00");
+    await press("escape");
+    assert.deepEqual(plain(h.calls.at(-1)), ["pane.go", { direction: "left" }]);
+    ok("right and left as l and h; esc: the keyboard to the terminals");
   }
 
   // A session found: the whole context by part, from the request as sent and the notes attached; the skills from
@@ -180,7 +209,7 @@ const USER = "/home/me/.claude/skills";
     await press("enter");
     assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /another machine/);
     ok("a part unfolds to its rows: each tool, an MCP server's instructions and its loaded tools (a server taken away is gone), each instruction file; a file on another machine is not opened");
-    await press("k", "enter", "k", "k", "k", "enter", "k", "k", "k", "enter");
+    await press("h", "h", "k", "h", "h", "k", "h", "h");
     assert.equal((await listed()).length, 15);
 
     await press("g", "g", "j", "j", "j", "j", "j", "j", "j", "enter");
@@ -191,12 +220,18 @@ const USER = "/home/me/.claude/skills";
     assert.ok(pdf.includes("description ~14 · body ~1.0k (×2) · the model loaded it"), pdf.join(" | "));
     h.world.execs.length = 0; h.notes.length = 0;
     await press("enter");
-    assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /No file known for docs:pdf/);
+    assert.ok(pdf.includes("/plugins/cache/docs/skills/pdf/SKILL.md"), pdf.join(" | "));
+    assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /another machine/);
     await press("j");
     assert.ok((await told()).includes("description ~13 · body ~1.0k · the model loaded it"));
     await press("j");
     assert.ok((await told()).includes("body ~100 · you ran it"));
-    ok("the loaded skills unfolded (description + body): a skill's tokens part by part and who loaded it; a plugin's skill has no file to open");
+    ok("the loaded skills unfolded (description + body): a skill's tokens part by part and who loaded it; a plugin's loaded skill has its file, from the folder its body names");
+    h.notes.length = 0;
+    await press("g", "g", "j", "j", "l", "l", "enter");
+    assert.deepEqual(h.world.execs, []); assert.match(h.notes.at(-1).title, /No file known for Bash/);
+    await press("h", "h");
+    ok("a row that is no file (a tool) says so");
 
     h.world.execs.length = 0;
     rows.push(BODY("/work/real/.claude/skills/deploy", 800, true));
