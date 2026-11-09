@@ -137,7 +137,9 @@ export default class Bufferline extends View {
     // An unnamed tab is called after what runs in it (claude, zsh), not "tab".
     const label = (c) => { if (c.named) return c.name; const x = ps.find((x) => x.tab === c.id && x.focused) ?? ps.find((x) => x.tab === c.id); return x?.app ?? x?.mod ?? "shell"; };
     const tab = (c) => h_flex().h_full().flex_none().items_center().gap(5).px(10)
-      .border_b(2).border_color(c.active ? t.foreground : SHELF(t))
+      // The shown tab's underline is soft (dim, not foreground). The others' is see-through, not the shelf's
+      // shade: a theme's border can be see-through itself, and would then show as a faint line on the shelf.
+      .border_b(2).border_color(c.active ? t.dim : "#00000000")
       .child(div().text_color(t.dim).child(`${c.index}`))
       .child(div().max_w(180).truncate().text_color(c.active ? t.foreground : t.muted).child(label(c)))
       .when(mark(t, st.tab(c.id), "cell") != null, el => el.child(mark(t, st.tab(c.id), "cell")));
