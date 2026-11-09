@@ -9,8 +9,10 @@
 // run it, by /name) and off; a loaded one (the whole SKILL.md is in the context) is marked. Tokens are characters / 4,
 // an estimate; the context's size is the real one from the last turn.
 // Every number is shown once. The sum, on top: the parts' tokens together and, dim, the real size with the
-// conversation. A line: its tokens and its share of the part it is in (a top part's of the sum). Under the list, the cursor's line: only what its
-// line does not say (what it is, a part's rows, a skill's tokens by description and body, its file).
+// conversation. A line: its tokens and its share of the part it is in (a top part's of the sum); an unfolded part
+// shows none, the lines under it do, so what is drawn always adds up. Under the list, the cursor's line: only what
+// its line does not say (what it is, an unfolded part's tokens, its rows, a skill's tokens by description and body,
+// its file). A loaded skill has a dot and is bright.
 // Whose a skill is: mine when its SKILL.md is in a skills folder of mine. The shared folder is ~/.agents/skills (every
 // agent's skills are linked from there); one only in the agent's own folder (~/.claude/skills/<name>, a --skill
 // folder of Pi's) is mine too, marked "claude only" / "pi only"; a repo's is marked "repo". The rest are the
@@ -302,7 +304,7 @@ function skillsIn(found, over, seen, agent) {
   // A row's tokens, part by part.
   const detail = (s) => s.loaded ? [s.listed != null ? `description ${about(s.listed)}` : "", `body ${about(s.body)}${s.times > 1 ? ` (×${s.times})` : ""}`, s.how].filter(Boolean).join(" · ")
     : s.listed != null ? `description ${about(s.listed)} · not loaded` : s.kind === "auto" && told ? "not in the model's list" : s.kind === "auto" ? "" : "not in the context";
-  return [...byName.values()].map((s) => ({ ...s, kids: [], note: [s.note, s.loaded ? "loaded" : ""].filter(Boolean).join(" · "), tokens: cost(s), detail: detail(s) }));
+  return [...byName.values()].map((s) => ({ ...s, kids: [], tokens: cost(s), detail: detail(s) }));
 }
 
 const byCost = (items) => items.sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name));
@@ -641,27 +643,31 @@ export default class Context extends View {
     if (sel >= this.top + fit) this.top = sel - fit + 1;
     this.top = Math.max(0, Math.min(this.top, Math.max(0, lines.length - fit)));
     const pick = (l) => (_ev, cx) => { this.cursor = l.id; this.handle.focus(); if (l.node.part) this.fold(l, cx); cx.notify(); };
-    // A part's line: an arrow, its name, its tokens and its share of the part it is in (a top part's of the sum, so
-    // the shares on one level add up to its part's). A row's: its name, a note, its tokens and share. Each level a
-    // step further in, and the name and tokens follow: a top part's bold, the next level's plain, deeper ones dim.
-    const cost = (l, color) => (el) => el.child(div().flex_none().w(46).text_right().text_size(11).text_color(l.depth > 1 ? t.dim : color).when(l.depth === 0, (el) => el.font_semibold()).child(about(l.node.tokens)))
+    // A part's line: an arrow, its name and, folded (or with nothing to unfold), its tokens and its share of the part
+    // it is in (a top part's of the sum). Unfolded, the lines under it carry the numbers instead, so what is shown
+    // always adds up: one level's shares to its part's, every number drawn to the sum on top. A row's: a dot when it
+    // is loaded, its name, a note, its tokens and share. Each level a step further in, and the name and tokens
+    // follow: a top part's bold, the next level's plain, deeper ones dim; a loaded row bright at any depth.
+    const unfolded = (l) => l.node.kids.length > 0 && this.open.has(l.id);
+    const cost = (l, bright) => (el) => el.child(div().flex_none().w(46).text_right().text_size(11).text_color(l.depth > 1 && !bright ? t.dim : t.foreground).when(l.depth === 0, (el) => el.font_semibold()).child(about(l.node.tokens)))
       .child(div().flex_none().w(28).text_right().text_size(11).text_color(t.dim).child(percent(l.node.tokens, l.of)));
     const line = (l) => { const n = l.node; return n.part
       ? h_flex().id(`context-h-${l.id}`).h(ROW).flex_none().pl(8 + l.depth * INDENT).pr(8).gap(6).items_center().rounded(6).cursor_pointer()
         .when(focusedNow && l === cur, (el) => el.bg(t.hover)).hover((s) => s.bg(t.hover)).on_click(pick(l))
         .child(div().flex_none().w(10).text_size(10).text_color(t.dim).child(!n.kids.length ? "" : this.open.has(l.id) ? "▾" : "▸"))
         .child(div().flex_1().min_w(0).truncate().when(l.depth === 0, (el) => el.font_semibold()).text_color(l.depth > 1 ? t.muted : t.foreground).child(n.name))
-        .when(n.tokens > 0, cost(l, t.foreground))
+        .when(n.tokens > 0 && !unfolded(l), cost(l, false))
       : h_flex().id(`context-row-${l.id}`).h(ROW).flex_none().pl(8 + l.depth * INDENT).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
         .when(focusedNow && l === cur, (el) => el.bg(t.hover)).hover((s) => s.bg(t.hover)).on_click(pick(l))
-        .child(div().flex_1().min_w(0).truncate().text_color(n.tokens ? t.foreground : t.muted).child(n.name))
+        .child(div().flex_none().w(10).text_size(10).text_color(t.accent).child(n.loaded ? "●" : ""))
+        .child(div().flex_1().min_w(0).truncate().text_color(n.loaded ? t.foreground : n.tokens ? t.muted : t.dim).child(n.name))
         .when(Boolean(n.note), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(n.note)))
-        .when(n.tokens > 0, cost(l, n.loaded ? t.foreground : t.dim)); };
-    // Under the list, the cursor's line, what its line does not say: what it is, a part's rows, a skill's tokens by
-    // description and body, its file.
+        .when(n.tokens > 0, cost(l, Boolean(n.loaded))); };
+    // Under the list, the cursor's line, what its line does not say: what it is, an unfolded part's tokens, a part's
+    // rows, a skill's tokens by description and body, its file.
     const at = cur?.node, told = !at ? [] : !at.part
       ? [at.description || "No description", at.detail, at.file ? short(at.file) : ""]
-      : [at.description, [at.tokens ? "" : "not in the context", at.count ? `${at.count} rows` : ""].filter(Boolean).join(" · "), ""];
+      : [at.description, [!at.tokens ? "not in the context" : unfolded(cur) ? `${about(at.tokens)} tokens` : "", at.count ? `${at.count} rows` : ""].filter(Boolean).join(" · "), ""];
     const empty = !p ? "No agent focused yet"
       : !key ? `Read for ${Object.values(AGENTS).join(", ")} only so far, not ${p.program?.name ?? p.app ?? "this agent"}`
       : this.failed.has(key) ? "Could not read the context (r tries again)"
