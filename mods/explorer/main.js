@@ -434,8 +434,8 @@ export default class Explorer extends View {
     return h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(7).cursor_pointer()
       // Changed files, and folders with changes under them, get a light shade so they stand out.
       .when(!here && (entry.dir ? (this.sums[`${this.root}/${path}`]?.count ?? 0) > 0 : Boolean(mark)), el => el.bg(t.chrome))
-      // The cursor row: a faint tint, and only while the explorer has the keyboard.
-      .when(here && focused, el => el.bg(t.hover)).hover(s => s.bg(t.hover))
+      // The cursor row: the selected colour (hover is too close to the background in some themes), and only while the explorer has the keyboard.
+      .when(here && focused, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
       .child(entry.dir ? svg(`mods/explorer/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(svg(`mods/explorer/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
       .child(div().flex_1().min_w(0).truncate().text_color(mark === "D" ? t.dim : t.foreground).child(entry.name))

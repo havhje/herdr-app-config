@@ -183,7 +183,7 @@ export default class Links extends View {
     const url = isUrl(e.link), name = url ? e.link.replace(/^https?:\/\//, "") : e.link.slice(e.link.lastIndexOf("/") + 1);
     const where = url ? "" : e.link.slice(0, e.link.lastIndexOf("/")).replace(/^\/home\/[^/]+/, "~");
     return h_flex().id(`link-${e.link}`).h(26).flex_none().px(8).gap(8).items_center().rounded(7).cursor_pointer()
-      .when(here, (el) => el.bg(t.hover)).hover((s) => s.bg(t.hover))
+      .when(here, (el) => el.bg(t.selected)).hover((s) => s.bg(t.hover))
       .on_click((_ev, cx) => { this.cursor = e.link; this.open(e); cx.notify(); })
       .child(div().w(34).flex_none().text_size(11).text_color(url ? t.accent : t.dim).child(url ? "url" : ext(e.link)))
       .child(div().flex_none().max_w(200).truncate().text_color(t.foreground).child(name))
