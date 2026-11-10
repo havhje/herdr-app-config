@@ -1,4 +1,4 @@
-// The leader's moves, through its keys (leader/main.js TREE): <leader>o / <leader>i walk the jumplist, <leader>¨a / <leader>åa
+// The leader's moves, through its keys (leader/main.js TREE): <leader>o / <leader>i walk the jumplist, <leader>a¨ / <leader>aå
 // walk the agents that need me. The bufferline (mods/bufferline) keeps both records the leader reads: shared "jumps" and
 // shared "agents.log". Pinned before these move, so the move shows up as a change here.
 const assert = require("node:assert/strict");
@@ -101,23 +101,23 @@ function start(build) {
   q.focusPane("p5"); land(q);
 
   {
-    const calls = await leaderKey(q, "¨", "a");
+    const calls = await leaderKey(q, "a", "¨");
     assert.deepEqual(plain(calls).slice(-2), [["agent.focus", { terminal: "t5" }], ["pane.focus", { terminal: "t5" }]]);
-    ok("<leader>¨a from outside the queue: the longest-blocked agent first (focus agent, then its pane)");
+    ok("<leader>a¨ from outside the queue: the longest-blocked agent first (focus agent, then its pane)");
   }
-  await leaderKey(q, "¨", "a");
+  await leaderKey(q, "a", "¨");
   assert.equal(at(q), "p1");
-  ok("<leader>¨a: then the next blocked one");
-  await leaderKey(q, "¨", "a");
+  ok("<leader>a¨: then the next blocked one");
+  await leaderKey(q, "a", "¨");
   assert.equal(at(q), "p2");
   assert.equal(q.terminal("t2").status, "idle", "the fake: looking at a done agent makes it idle");
-  ok("<leader>¨a: after the blocked ones, the done one");
-  await leaderKey(q, "¨", "a");
+  ok("<leader>a¨: after the blocked ones, the done one");
+  await leaderKey(q, "a", "¨");
   assert.equal(at(q), "p3");
-  ok("<leader>¨a: off the queue (the done one turned idle once seen): back to its first");
-  await leaderKey(q, "å", "a");
+  ok("<leader>a¨: off the queue (the done one turned idle once seen): back to its first");
+  await leaderKey(q, "a", "å");
   assert.equal(at(q), "p1");
-  ok("<leader>åa: backward, wrapping round");
+  ok("<leader>aå: backward, wrapping round");
 
   {
     // The status log: the bufferline notes an agent turning blocked, or finishing; the queue then orders by that time.
@@ -127,7 +127,7 @@ function start(build) {
     const log = q.shared("agents.log").map((e) => `${e.address}:${e.what}`);
     assert.deepEqual(log, ["t4:blocked"]);
     q.focusPane("p5"); land(q);
-    await leaderKey(q, "å", "a");
+    await leaderKey(q, "a", "å");
     assert.equal(at(q), "p4", "the just-blocked agent waits least: last in the queue");
     q.setStatus("t1", "working"); land(q);
     q.setStatus("t1", "idle"); land(q);
@@ -142,16 +142,16 @@ function start(build) {
       h.addPane({ pane: "p2", tab: "b2", terminal: "t2", status: "working" });
     });
     n.focusPane("p1"); land(n);
-    await leaderKey(n, "¨", "a");
+    await leaderKey(n, "a", "¨");
     assert.equal(lastNote(n), "Nothing needs you");
     assert.equal(at(n), "p1");
     n.setStatus("t2", "blocked");
-    await leaderKey(n, "¨", "a");
+    await leaderKey(n, "a", "¨");
     assert.equal(at(n), "p2");
-    await leaderKey(n, "¨", "a");
+    await leaderKey(n, "a", "¨");
     assert.equal(lastNote(n), "Only this one needs you");
     assert.equal(at(n), "p2");
-    ok("<leader>¨a: says \"Nothing needs you\" with none, \"Only this one needs you\" when on the only one");
+    ok("<leader>a¨: says \"Nothing needs you\" with none, \"Only this one needs you\" when on the only one");
   }
 
   {
@@ -166,9 +166,9 @@ function start(build) {
     });
     Object.assign(m.terminal("t2"), { turn: 3, labels: { settled: "x:3" } });
     m.focusPane("p3"); land(m);
-    await leaderKey(m, "¨", "a");
+    await leaderKey(m, "a", "¨");
     assert.equal(at(m), "p1");
-    await leaderKey(m, "¨", "a");
+    await leaderKey(m, "a", "¨");
     assert.equal(lastNote(m), "Only this one needs you");
     ok("needs-me queue: an agent with a stuck sub-agent is in it; a settled done one isn't");
   }
@@ -183,9 +183,9 @@ function start(build) {
       h.addPane({ pane: "p3", tab: "b3" });
     });
     e.focusPane("p3"); land(e);
-    await leaderKey(e, "¨", "a");
+    await leaderKey(e, "a", "¨");
     assert.equal(at(e), "p2", "the errored agent first: it reads blocked");
-    await leaderKey(e, "¨", "a");
+    await leaderKey(e, "a", "¨");
     assert.equal(at(e), "p1");
     ok("needs-me queue: an agent whose own terminal is in error is in it, as blocked");
   }

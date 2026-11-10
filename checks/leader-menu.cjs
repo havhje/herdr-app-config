@@ -33,8 +33,6 @@ const shown = (h) => {
     "u +ui",
     "w +panes",
     "TAB +tabs",
-    "¨ +next",
-    "å +prev",
   ]);
   ok("top level: every key, <space> as SPC, in which-key's order");
 
@@ -46,13 +44,15 @@ const shown = (h) => {
     "g Toggle grouping (buffer/status)",
     "i Toggle idle agents",
     "p Pin/unpin agent",
+    "¨ Next agent that needs me",
+    "å Previous agent that needs me",
   ]);
-  ok("a group: sorted the same way");
+  ok("a group: sorted the same way, ¨ (next) and å (previous) last like nvim's ] and [");
 
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
-  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "å", key_char: "å" }, h.cx);
-  assert.deepEqual(shown(h), ["a Agent that needs me", "b Buffer", "t Tab"]);
-  ok("å +prev: like nvim's [ (¨ +next the same)");
+  fire(find(h.leader.render(), "leader"), "on_key_down", { key: "b", key_char: "b" }, h.cx);
+  assert.deepEqual(shown(h), ["b Other buffer", "d Delete buffer", "N New buffer", "R Rename buffer", "¨ Next buffer", "å Previous buffer"]);
+  ok("b +buffer: ¨ and å step through the buffers");
 
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "backspace" }, h.cx);
   fire(find(h.leader.render(), "leader"), "on_key_down", { key: "g", key_char: "g" }, h.cx);

@@ -38,25 +38,17 @@ const pick = (mode) => openOverlay({ mod: "agent-finder", kind: "dialog", width:
 
 const otherBuffer = () => { const id = shared("leader.otherBuffer"); if (id && spaces().some((s) => s.id === id)) run("space.select", { id }); };
 
-// Like my nvim: next/prev live only under ¨/å, its ]/[ (the keys where ] and [ sit on a US keyboard;
-// needs the Norwegian layout without dead keys). The leader groups hold actions.
+// Like my nvim's ]/[: ¨ is next and å is previous (the keys where ] and [ sit on a US keyboard; needs the
+// Norwegian layout without dead keys). Each sits in the group of the thing it steps through.
 const TREE = {
   " ": ["Find agent", () => pick("agents")],
   "?": ["Key help", cmd("app.help")],
   o: ["Jump back", () => jumpBy(-1)],
   i: ["Jump forward", () => jumpBy(1)],
-  "¨": { label: "+next", keys: {
-    a: ["Agent that needs me", (open) => nextNeed(1, open)],
-    b: ["Buffer", cmd("space.next")],
-    t: ["Tab", cmd("tab.next")],
-  } },
-  "å": { label: "+prev", keys: {
-    a: ["Agent that needs me", (open) => nextNeed(-1, open)],
-    b: ["Buffer", cmd("space.prev")],
-    t: ["Tab", cmd("tab.prev")],
-  } },
   b: { label: "+buffer", keys: {
     b: ["Other buffer", otherBuffer],
+    "¨": ["Next buffer", cmd("space.next")],
+    "å": ["Previous buffer", cmd("space.prev")],
     d: ["Delete buffer", () => run("space.close", { id: active()?.id })],
     R: ["Rename buffer", () => run("space.rename", { id: active()?.id })],
     N: ["New buffer", cmd("space.new")],
@@ -74,7 +66,7 @@ const TREE = {
   // LazyVim's <leader><tab> tabs group.
   tab: { label: "+tabs", keys: {
     tab: ["New tab", cmd("tab.new")],
-    // LazyVim's ] and [ here, as ¨ and å (see +next/+prev).
+    // LazyVim's ] and [ here, as ¨ and å.
     "¨": ["Next tab", cmd("tab.next")],
     "å": ["Previous tab", cmd("tab.prev")],
     d: ["Close tab", cmd("tab.close")],
@@ -112,6 +104,9 @@ const TREE = {
       if (a) setShared("agents.pins", pins.includes(a) ? pins.filter((p) => p !== a) : [...pins, a]);
     }],
     d: ["Kill agent (asks first)", (open) => killAgent(open)],
+    // The needs-me queue, a step at a time.
+    "¨": ["Next agent that needs me", (open) => nextNeed(1, open)],
+    "å": ["Previous agent that needs me", (open) => nextNeed(-1, open)],
   } },
   u: { label: "+ui", keys: {
     s: ["Settings", cmd("app.settings")],

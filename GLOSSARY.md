@@ -135,7 +135,7 @@ A set of related leader keys under one letter, such as +buffer, +agents, +git, +
 _Avoid_: submenu, category
 
 **Needs-me queue**:
-The agents that are blocked or done, blocked first and longest-waiting first; `<leader>¨a` / `<leader>åa` step through it.
+The agents that are blocked or done, blocked first and longest-waiting first; `<leader>a¨` / `<leader>aå` step through it.
 _Avoid_: inbox, attention list
 
 **Jumplist**:
