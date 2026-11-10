@@ -282,12 +282,14 @@ export default class Explorer extends View {
   }
 
   // Opens a file in nvim in its own terminal window (Omarchy's default editor), outside Herdr.
-  // PDFs go to the default browser instead.
+  // PDFs go to Papers: its ink, highlights and notes are saved into the PDF as standard
+  // annotations (Ctrl+S), which an agent reads back with PyMuPDF (issue #19). The browser
+  // flattens ink into page content only Chrome can edit again.
   edit(path, cx) {
     if (this.on) { this.say("nvim outside Herdr works for this computer's files only"); cx.notify(); return; }
     const full = `${this.root}/${path}`;
     if (/\.pdf$/i.test(path)) {
-      cx.spawn(async () => { try { await exec("omarchy-launch-browser", [`file://${encodeURI(full)}`], { cwd: this.root }); } catch (e) { notify({ title: "Could not open browser", body: String(e), level: "error" }); } });
+      cx.spawn(async () => { try { await exec("uwsm-app", ["--", "papers", full], { cwd: this.root }); } catch (e) { notify({ title: "Could not open Papers", body: String(e), level: "error" }); } });
       return;
     }
     cx.spawn(async () => { try { await exec("omarchy-launch-editor", [full], { cwd: this.root }); } catch (e) { notify({ title: "Could not open nvim", body: String(e), level: "error" }); } });
