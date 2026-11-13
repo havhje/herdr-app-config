@@ -141,15 +141,28 @@ export default class Leader extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
+        // Tab never reaches on_key_down (Herdr keeps it to walk the controls, which also takes the keyboard from the
+        // menu), so keys.json's "mod:leader" section sends it here as a command.
+        if (c === "tab") { if (this.opened) { this.step("tab", cx); cx.notify(); } continue; }
         if (c !== "open" && c !== "openSidebar") continue;
         setShared("leader.open", { gen: Date.now(), pane: focused()?.pane ?? null, sidebarHidden: c === "openSidebar" });
-        this.path = []; this.h.focus(); cx.notify();
+        this.path = []; this.grab(cx, this.opened = Date.now(), 8);
       }
     });
   }
 
+  // Take the keyboard, and ask again until we have it: a focus asked for before the menu is drawn is dropped, and
+  // bufferline's 60 ms wait doesn't always cover that. Stops once focused, or when the menu closed or opened anew.
+  grab(cx, opened, left) {
+    if (this.opened !== opened) return;
+    if (!this.h.is_focused()) { this.h.focus(); cx.notify(); }
+    else if (left < 8) return;
+    if (left > 0) cx.timer.after(80, (c) => this.grab(c ?? cx, opened, left - 1));
+  }
+
   // Hide again, and give the keyboard back to the pane we came from.
   close(keepSidebar = false) {
+    this.opened = null;
     const open = shared("leader.open");
     run("layout.hide", { id: "leader" });
     if (open?.sidebarHidden && !keepSidebar) run("layout.hide", { id: "sidebar" });
@@ -160,7 +173,11 @@ export default class Leader extends View {
     cx.stop_propagation();
     if (e.key === "escape") return this.close();
     if (e.key === "backspace") { if (this.path.length) { this.path.pop(); cx.notify(); } else this.close(); return; }
-    const k = e.key === "space" ? " " : e.key === "tab" ? "tab" : (e.key_char ?? e.key);
+    this.step(e.key === "space" ? " " : e.key === "tab" ? "tab" : (e.key_char ?? e.key), cx);
+  }
+
+  // One key of the menu: into a group, or run the entry and close.
+  step(k, cx) {
     const entry = this.level().keys[k];
     if (!entry) return;
     if (!Array.isArray(entry)) { this.path.push(k); cx.notify(); return; }
